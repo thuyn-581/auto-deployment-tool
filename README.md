@@ -1,4 +1,3 @@
-# auto_deployment_tool
 # Introduction:
 The tool has been designed for bringing up a new ICP/CP cluster without manual intervention.
 
@@ -28,7 +27,7 @@ curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://
 
 # Sample post messages:
 1. CP4MCM online
-{
+`{
   "arch": "x86_64",
   "shellPwd":"<shell_pwd>",
   "cloudpak": "mcm",
@@ -43,10 +42,10 @@ curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://
     	"proxyNode": "worker1.<cluster_name>.os.fyre.ibm.com",
     	"managementNode": "worker2.<cluster_name>.os.fyre.ibm.com"
 	}
-}
+}`
 
 2. Common Services offline
-{
+`{
   "arch": "x86_64",
   "shellPwd":"<shell_pwd>",
   "cloudpak": "cs",
@@ -61,10 +60,10 @@ curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://
     	"proxyNode": "worker1.<cluster_name>.os.fyre.ibm.com",
     	"managementNode": "worker2.<cluster_name>.os.fyre.ibm.com"
 	}
-}
+}`
 
 3. Stand-alone ICP
-{
+`{
   "arch": "x86_64",
   "shellPwd":"<shell_pwd>",
   "cloudpak": "icp",
@@ -79,4 +78,4 @@ curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://
     	"proxyNode": "9.21.51.x",
     	"managementNode": "9.21.51.x"
 	}
-}
+}`
