@@ -14,12 +14,21 @@ cluster_nodes:
   management:
     - ${MGMT_NODE}
 
-# Storage Class
 storage_class: ${SC_NAME}
 
 ## You can set different storage class for logging.
 ## By default it will use the value of storage_class.
 # elasticsearch_storage_class:
+
+## If you are installing on ROKS environment please update following settings
+## roks_enabled: set this to true
+## roks_url: Openshift public service endpoint URL
+## roks_user_prefix: User prefix used for users enabled on ROKS, Default value is 'IAM#'.
+## You can get users information from command 'oc get users'.
+## ROKS settings
+roks_enabled: false
+roks_url: <roks_url>
+roks_user_prefix: "IAM#"
 
 default_admin_password: admin
 password_rules:
@@ -40,20 +49,7 @@ management_services:
   audit-logging: disabled
   system-healthcheck-service: disabled
   multitenancy-enforcement: disabled
-  configmap-watcher: disabled
-
-  # mcm services
-  multicluster-hub: enabled
-  search: enabled
-  key-management: enabled
-  notary: disabled
-  cis-controller: disabled
-  vulnerability-advisor: disabled
-  mutation-advisor: disabled
-  sts: disabled
-  secret-encryption-policy-controller: disabled
-  image-security-enforcement: disabled
-
+  
 image_repo: hyc-cloud-private-${STAGE}-docker-local.artifactory.swg-devops.com/ibmcom-amd64
 private_registry_enabled: true
 docker_username: ${ARTIFACTORY_USER}
@@ -62,4 +58,4 @@ docker_password: ${ARTIFACTORY_TOKEN}
 chart_repo:
   addons:
     url: "https://na.artifactory.swg-devops.com/artifactory/ui/artifactactions/downloadfolder?repoKey=hyc-cloud-private-${STAGE}-helm-local&path=latest&archiveType=tgz&includeChecksumFiles=false"
-    header: "X-JFrog-Art-Api: ${ARTIFACTORY_TOKEN}"
+    header: "X-JFrog-Art-Api: ${ARTIFACTORY_TOKEN}"  
