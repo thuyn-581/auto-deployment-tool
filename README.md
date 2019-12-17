@@ -22,7 +22,7 @@ The following deployment scenarios are currently supported by the tool:
 	- Manifest: offline
 	- Stage: release
 	
-curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://9.21.51.225:5555/run
+`curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://9.21.51.225:5555/run`
 
 
 # Sample post messages:
