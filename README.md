@@ -28,9 +28,6 @@ The following deployment scenarios are currently supported by the tool:
 
 # Sample post messages:
 1. CP4MCM online
-JSON
-----
-
 ```json
 {
   "arch": "x86_64",
@@ -51,9 +48,6 @@ JSON
 ```
 
 2. Common Services offline
-JSON
-----
-
 ```json
 {
   "arch": "x86_64",
@@ -74,9 +68,6 @@ JSON
 ```
 
 3. Stand-alone ICP
-JSON
-----
-
 ```json
 {
   "arch": "x86_64",
