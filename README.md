@@ -41,8 +41,8 @@ JSON
   "cluster": {
     	"name":"<cluster_name>",
     	"scName":"rook-ceph-cephfs-internal",
-		"infNode": "<cluster_name>.fyre.ibm.com",
-		"masterNode": "worker0.<cluster_name>.os.fyre.ibm.com",
+	"infNode": "<cluster_name>.fyre.ibm.com",
+	"masterNode": "worker0.<cluster_name>.os.fyre.ibm.com",
     	"proxyNode": "worker1.<cluster_name>.os.fyre.ibm.com",
     	"managementNode": "worker2.<cluster_name>.os.fyre.ibm.com"
 	}
@@ -64,8 +64,8 @@ JSON
   "cluster": {
     	"name":"<cluster_name>",
     	"scName":"rook-ceph-cephfs-internal",
-		"infNode": "<cluster_name>-inf.fyre.ibm.com",
-		"masterNode": "worker0.<cluster_name>.os.fyre.ibm.com",
+	"infNode": "<cluster_name>-inf.fyre.ibm.com",
+	"masterNode": "worker0.<cluster_name>.os.fyre.ibm.com",
     	"proxyNode": "worker1.<cluster_name>.os.fyre.ibm.com",
     	"managementNode": "worker2.<cluster_name>.os.fyre.ibm.com"
 	}
@@ -86,9 +86,9 @@ JSON
   "url":"hyc-cloud-private-release-generic-local/offline/3.2.1",
   "cluster": {
     	"name":"<cluster_name>",
-		"infNode": "9.21.51.x",
-		"masterNode": "9.21.51.x",
-		"workerNode": "9.21.51.x",
+	"infNode": "9.21.51.x",
+	"masterNode": "9.21.51.x",
+	"workerNode": "9.21.51.x",
     	"proxyNode": "9.21.51.x",
     	"managementNode": "9.21.51.x"
 	}
