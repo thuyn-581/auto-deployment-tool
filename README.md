@@ -8,9 +8,9 @@ The tool is built using Node.js and written in JavaScript to kick start the depl
 
 
 # Endpoints:
-- http://9.21.51.225:5555/status - server GET request for /status endpoint to show state of this app by returning task queues' items (Queued, In Progress, Completed)
-- http://9.21.51.225:5555/run -server POST request to /run end-point to initiate auto deployment on the target cluster.
-- http://9.21.51.225:5555/task/<runId> - server GET request for /task end-point.  Allows initiator to know when their task completes.
+- http://9.21.51.225:5555/status - server GET request for /status endpoint to show state of this app by returning task queues (Queued, In Progress, Completed)
+- http://9.21.51.225:5555/run - server POST request to /run end-point to initiate auto deployment on the target cluster
+- http://9.21.51.225:5555/task/<runId> - server GET request for /task end-point.  Allows initiator to know when their task completes
 
 
 # Usages:
