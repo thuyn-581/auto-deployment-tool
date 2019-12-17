@@ -111,7 +111,7 @@ function cancelTask(req, res) {
 			setUser(task);
 			let cmd = 'sshpass -p'+ pwd +
 				' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + task.infNode +
-				' \"ps -ef | grep -v grep | grep '+ task.SCRIPT_NAME +' | awk \'{print $2}\' |xargs kill\"';
+				' \"ps -ef | grep -v grep | grep _deploy_ | awk \'{print $2}\' |xargs kill\"';
 			require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 			task.exitStatus = 'Cancelled';
 			res.json(task).end();
