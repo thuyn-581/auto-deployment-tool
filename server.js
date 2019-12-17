@@ -18,6 +18,7 @@ var exitCodeMapping = {};
 exitCodeMapping[0] = 'COMPLETED';
 
 var ARCH;
+var PROVIDER;
 var pwd;
 var infNode; 
 var CLUSTER_NAME;
@@ -35,14 +36,17 @@ var MANIFEST='offline';
 var MASTER_NODE;
 var WORKER_NODE='';
 
+
 var CP_REPO_IMAGE_AND_TAG = 'https://na.artifactory.swg-devops.com/artifactory';
 var SCRIPT_NAME;
+var user='root';
 
 var app = express(); // creates a new server to listen for incoming HTTP request
 app.use(bodyParser.json());
 app.get('/status', getStatus);  // server GET request for /status end-point to show state of this launcher app.
 app.post('/run', queueTask); // server POST request to /run end-point.  Allows someone (or something) to initiate execution.
 app.get('/task', getTask); // server GET request for /task end-point.  Allows initiator to know when their task completes.
+app.put('/kill',cancelTask); // server PUT request for /task end-point.  Allows initiator to cancel when their executing task.
 
 setInterval(processQueue, 3000); // start main interval that checks queue for task to run.
 
@@ -73,13 +77,11 @@ function getTask(req, res) {
                 task = currentTasks[i];
             }
         }
-
         for (var i = 0; i < taskQueue.length && !task; i++) {
             if(taskQueue[i].runId === runId) {
                 task = taskQueue[i];
             }
         }
-
         for (var i = 0; i < completedTasks.length && !task; i++) {
             if(completedTasks[i].runId === runId) {
                 task = completedTasks[i];
@@ -94,15 +96,45 @@ function getTask(req, res) {
     }
 }
 
+function cancelTask(req, res) {
+	var runId = req.query['runId'];
+    var task;	
+
+    if (runId) {
+		for (var i = 0; i < currentTasks.length && !task; i++) {
+           if(currentTasks[i].runId === runId) {
+                task = currentTasks[i];
+            }
+        }
+		if(task) {
+			// send kill signal
+			setUser(task);
+			let cmd = 'sshpass -p'+ pwd +
+				' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + task.infNode +
+				' \"ps -ef | grep -v grep | grep '+ task.SCRIPT_NAME +' | awk \'{print $2}\' |xargs kill\"';
+			require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
+			task.exitStatus = 'Cancelled';
+			res.json(task).end();
+			
+			// Remove task from executing queue
+			currentTasks.splice(currentTasks.indexOf(task),1);
+			taskCompleted(task);
+		} else {
+			res.status(404).end();  // can't find a match.
+		}
+	}	
+}
+
 // queues a task to run a test.  return json object containing runId that can be used for initiator get task status.
 function queueTask(req, res) {
     var runId = 'run_id_' + new Date().getTime(); // generate a random runId.	
 	CP_REPO_IMAGE_AND_TAG = 'https://na.artifactory.swg-devops.com/artifactory/';
 	
+	ARCH = req.body.arch;
+	PROVIDER = req.body.provider;
 	pwd = req.body.shellPwd;
 	CP = req.body.cloudpak;		
-	URL = req.body.url;
-	ARCH = req.body.arch;
+	URL = req.body.url;	
 	VERSION = req.body.version;
 
 	CLUSTER_NAME = req.body.cluster.name;
@@ -116,10 +148,10 @@ function queueTask(req, res) {
 		MASTER_NODE = req.body.cluster.masterNode;
 		STAGE = arr[3];
 		MANIFEST = req.body.manifest;
-		SCRIPT_NAME = 'cp_deploy_'+ MANIFEST +'.sh';
+		SCRIPT_NAME = 'cp_deploy_'+ MANIFEST +'-'+ ARCH +'.sh';
 		if (MANIFEST === 'offline'){
 			IMAGE = (CP === 'mcm')?'ibm-cp4mcm-core-'+ arr[6] +'-'+ ARCH +'.tar.gz':
-									'common-service-'+ arr[6] +'-'+ ARCH +'.tar.gz';
+									'common-services-'+ arr[6] +'-'+ ARCH +'.tar.gz';
 			CP_REPO_IMAGE_AND_TAG += URL + '/' + IMAGE;			
 		}
 		else{
@@ -137,6 +169,7 @@ function queueTask(req, res) {
 	}
     
 	var task = {
+		PROVIDER,
 		CP,
 		SCRIPT_NAME,
 		CP_REPO_IMAGE_AND_TAG,
@@ -160,30 +193,33 @@ function processQueue() {
 	CP_DIR = '/opt/ibm-cloudpak/' + CP + '-' + STAGE + '_' + VERSION +'_' + MANIFEST
 		
 	// pull first task off the queue and run it.
-    let currentTask = taskQueue.shift();	
-    console.log('Running task.  runId: ' + currentTask.runId);
+    let task = taskQueue.shift();	
+    console.log('Running task.  runId: ' + task.runId + ' - cluster: '+ task.CLUSTER_NAME);
 	
-	currentTasks.unshift(currentTask);
+	currentTasks.unshift(task);
+	taskExecute(task);
+}	
+
+function taskExecute(currentTask){
+	setUser(currentTask);
 	let logfile = fs.createWriteStream('/root/Scripts/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
 	
 	// copy executitng scripts to target node
 	let cmd ='';
-	let prefix = (CP === 'icp')? 'icp':'cp';
-	let bypassHostChecking = '-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
-	
+	let prefix = (CP === 'icp')? 'icp':'cp';		
 	cmd = 'sshpass -p'+ pwd +
-			' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@' + infNode +
-			' mkdir -p /root/deploy';
+			' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + currentTask.infNode +
+			' mkdir -p ~/deploy';
 	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 				
 	cmd = 'sshpass -p'+ pwd +
-			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no /root/Scripts/'+ prefix +'_* root@'+ infNode +':/root/deploy';
+			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no /root/Scripts/'+ prefix +'_* '+ user +'@'+ currentTask.infNode +':~/deploy';
 	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 	
 	// add exec permission
 	cmd = 'sshpass -p'+ pwd +
-				' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@' + infNode + 
-				' chmod +x /root/deploy/'+ SCRIPT_NAME;
+				' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + currentTask.infNode + 
+				' chmod +x ~/deploy/'+ currentTask.SCRIPT_NAME;
 	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 								
 	// execute scripts at target node
@@ -202,44 +238,45 @@ function processQueue() {
 					' MGMT_NODE=' + MGMT_NODE + 
 					' SC_NAME=' + SC_NAME +
 					' CP_REPO_IMAGE_AND_TAG=' + CP_REPO_IMAGE_AND_TAG
-	cmd = 'sshpass -p'+ pwd +' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@' +
-				infNode + env_var +' /root/deploy/'+ SCRIPT_NAME;
+	cmd = 'sshpass -p'+ pwd +' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' +
+				infNode + env_var +' ~/deploy/'+ SCRIPT_NAME;
 	//console.log(cmd);
 	logfile.write('Executing command' + cmd);
 	let arr = cmd.split(" ");
 	var child = spawn(arr.shift(),arr);
 	
 	child.stdout.on('data', (data) => {
-		process.stdout.write(`${data}`)  // log to console
+		//process.stdout.write(`${data}`)  // log to console
 		logfile.write(data)  // log to file
 	})
 	
 	child.on('close', function (exitCode) { // Execution Tool exited, so do post-processing (i.e. post result to slack).
         taskCompleted(currentTask, exitCode);
         currentTask = null;
-    });
-
-}	
+    });	
+}
 
 function taskCompleted(task,exitCode){
-    var exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';
+	var exitStatus = task.exitStatus;
+	if ( exitStatus !== 'Cancelled'){
+	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
+		const execSync = require('child_process').execSync;
+		const cmd = 'tac /root/Scripts/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
 	
-	const execSync = require('child_process').execSync;
-	const cmd = 'tac /root/Scripts/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
-	
-    if (exitCodeMapping[exitCode]) {        
-		const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
-		exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
-    }
-    else {
-		const stdout = execSync(cmd +' | grep TASK | head -1');
-		if (`${stdout}`.length > 0){
-			exitStatus = 'FAILED: ' + `${stdout}`;
+		if (exitCodeMapping[exitCode]) {        
+			const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
+			exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
 		}
-    };
+		else {
+			const stdout = execSync(cmd +' | grep TASK | head -1');
+			if (`${stdout}`.length > 0){
+				exitStatus = 'FAILED: ' + `${stdout}`;
+			}
+		};
+		task.exitStatus = exitStatus;
+	}
 	
-    console.log('Task completed on '+ task.CLUSTER_NAME +'.  runId: ' + task.runId + ' exitStatus: ' + exitStatus);
-    task.exitStatus = exitStatus;
+    console.log('Task completed on '+ task.CLUSTER_NAME +'.  runId: ' + task.runId + ' exitStatus: ' + exitStatus);    
     sendSlackMessage(task);
 	
     // Remove task from executing queue
@@ -249,15 +286,14 @@ function taskCompleted(task,exitCode){
     completedTasks.unshift(task); 
     if (completedTasks.length > 10) {
         completedTasks.pop();
-    }	
-	
+    }		
 }
 
 function sendSlackMessage(task) {
-    var message = 'Cluster: *'+ CLUSTER_NAME +'* -- '+ infNode +'\n ```\n' +task.exitStatus + '\n```';
+    var message = 'Cluster: *'+ CLUSTER_NAME +'* -- '+ infNode +'\n ```\n' +task.exitStatus + '```';
     var body = {text: message}; // Slack requires message to be in a JSON object using text attribute.
 
-    console.log('Posting message to slack: ', message);
+    //console.log('Posting message to slack: ', message);
     superagent.post(SLACK_WEBHOOK)
         .type('application/json')
         .send(body)
@@ -272,5 +308,13 @@ function sendSlackMessage(task) {
         });
 }
 
+function setUser(task) {
+	switch(task.PROVIDER){
+		case 'fyre':
+			user = 'root';
+			break;
+	}
+}
+	
 app.listen(5555);
 console.log("server starting on port: " + 5555);
