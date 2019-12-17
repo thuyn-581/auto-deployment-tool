@@ -95,3 +95,6 @@ JSON
 	}
 }
 ```
+
+# Slack channel 
+https://ibm-cloudplatform.slack.com/archives/CRGTKJC73
