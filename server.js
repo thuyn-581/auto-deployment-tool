@@ -302,7 +302,7 @@ function taskCompleted(task,exitCode){
 
 function sendSlackMessage(task) {
 	var cloudpak = (task.CP === 'cs')? 'Common services': task.CP.toUpperCase();
-    var message = 'Cluster: *'+ CLUSTER_NAME +'* -- Installed Cloud Pak: *'+ cloudpak +' v'+ task.VERSION +'*\n```' +task.exitStatus + '```';
+    var message = 'Cluster: *'+ task.CLUSTER_NAME +'* -- Installed Cloud Pak: *'+ cloudpak +' v'+ task.VERSION +'*\n```' +task.exitStatus + '```';
     var body = {text: message}; // Slack requires message to be in a JSON object using text attribute.
 
     //console.log('Posting message to slack: ', message);
