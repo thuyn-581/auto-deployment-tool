@@ -201,19 +201,30 @@ function processQueue() {
 }	
 
 function taskExecute(currentTask){
-	setUser(currentTask);
-	let logfile = fs.createWriteStream('/root/Scripts/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
-	
-	// copy executitng scripts to target node
+	setUser(currentTask);	
+	let dir = '/root/auto_deployment_tool';
 	let cmd ='';
-	let prefix = (CP === 'icp')? 'icp':'cp';		
+	let prefix = (CP === 'icp')? 'icp':'cp';
+	
+	// create logs folfer if not exists
+	if (!fs.existsSync(dir +'/logs')){
+		cmd = 'mkdir -p '+ dir +'/logs';
+		require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
+	}	
+	let logfile = fs.createWriteStream(dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
+	
+	// copy executitng scripts to target node	
 	cmd = 'sshpass -p'+ pwd +
 			' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + currentTask.infNode +
 			' mkdir -p ~/deploy';
 	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 				
 	cmd = 'sshpass -p'+ pwd +
-			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no /root/Scripts/'+ prefix +'_* '+ user +'@'+ currentTask.infNode +':~/deploy';
+			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ dir +'/Scripts/'+ prefix +'_* '+ user +'@'+ currentTask.infNode +':~/deploy';
+	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
+	
+	cmd = 'sshpass -p'+ pwd +
+			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ dir +'/Templates/'+ prefix +'_* '+ user +'@'+ currentTask.infNode +':~/deploy';
 	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 	
 	// add exec permission
@@ -261,7 +272,7 @@ function taskCompleted(task,exitCode){
 	if ( exitStatus !== 'Cancelled'){
 	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
 		const execSync = require('child_process').execSync;
-		const cmd = 'tac /root/Scripts/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
+		const cmd = 'tac '+ dir +'/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
 	
 		if (exitCodeMapping[exitCode]) {        
 			const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
