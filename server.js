@@ -273,7 +273,7 @@ function taskCompleted(task,exitCode){
 				exitStatus = 'FAILED: ' + `${stdout}`;
 			}
 		};
-		task.exitStatus = exitStatus;
+		task.exitStatus = exitStatus.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 	}
 	
     console.log('Task completed on '+ task.CLUSTER_NAME +'.  runId: ' + task.runId + ' exitStatus: ' + exitStatus);    
@@ -310,7 +310,10 @@ function sendSlackMessage(task) {
 
 function setUser(task) {
 	switch(task.PROVIDER){
-		case 'fyre':
+		case '':
+			user = 'root';
+			break;
+		default:
 			user = 'root';
 			break;
 	}
