@@ -272,7 +272,7 @@ function taskCompleted(task,exitCode){
 	if ( exitStatus !== 'Cancelled'){
 	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
 		const execSync = require('child_process').execSync;
-		const cmd = 'tac '+ dir +'/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
+		const cmd = 'tac /root/auto_deployment_tool/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
 	
 		if (exitCodeMapping[exitCode]) {        
 			const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
