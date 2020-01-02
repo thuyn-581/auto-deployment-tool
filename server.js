@@ -4,13 +4,13 @@ var fs = require('fs');
 var { spawn } = require('child_process');
 var superagent = require('superagent');
 var PropertiesReader = require('properties-reader');
-var properties = PropertiesReader('~/auto_deployment_tool/properties.ini');
+var properties = PropertiesReader('/root/auto_deployment_tool/secret.properties');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
 var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
-var ARTIFACTORY_USER= properties.get('user');
-var ARTIFACTORY_TOKEN=properties.get('token')
+var ARTIFACTORY_USER= properties.get('artifact.user');
+var ARTIFACTORY_TOKEN=properties.get('artifact.token')
 
 
 var currentTasks = []; // currently executing tasks
@@ -338,4 +338,4 @@ function setUser(task) {
 	
 app.listen(5555);
 console.log("server starting on port: " + 5555);
-console.log(ARTIFACTORY_USER + '-' +ARTIFACTORY_TOKEN);
+
