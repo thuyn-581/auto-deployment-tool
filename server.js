@@ -3,12 +3,15 @@ var bodyParser = require("body-parser");
 var fs = require('fs');
 var { spawn } = require('child_process');
 var superagent = require('superagent');
+var PropertiesReader = require('properties-reader');
+var properties = PropertiesReader('~/auto_deployment_tool/properties.ini');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
 var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
-var ARTIFACTORY_USER='thuy.n.nguyen@ibm.com'
-var ARTIFACTORY_TOKEN='AKCp5e2qc4xtgwVcJwvdHm5Ed1vEaurYp8dpj32iYPJq6SjMvK8LCkq97VYSK4RszY71xetZL'
+var ARTIFACTORY_USER= properties.get('user');
+var ARTIFACTORY_TOKEN=properties.get('token')
+
 
 var currentTasks = []; // currently executing tasks
 var taskQueue = [];  // queue of tasks to be executed
@@ -284,6 +287,8 @@ function taskCompleted(task,exitCode){
 				exitStatus = 'FAILED: ' + `${stdout}`;
 			}
 		};
+		
+		// remove ANSI escape codes
 		task.exitStatus = exitStatus.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 	}
 	
@@ -333,3 +338,4 @@ function setUser(task) {
 	
 app.listen(5555);
 console.log("server starting on port: " + 5555);
+console.log(ARTIFACTORY_USER + '-' +ARTIFACTORY_TOKEN);
