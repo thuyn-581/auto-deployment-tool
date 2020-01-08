@@ -155,7 +155,8 @@ function queueTask(req, res) {
 		if (MANIFEST === 'offline'){
 			IMAGE = (CP === 'mcm')?'ibm-cp4mcm-core-'+ arr[6] +'-'+ ARCH +'.tar.gz':
 									'common-services-'+ arr[6] +'-'+ ARCH +'.tar.gz';
-			CP_REPO_IMAGE_AND_TAG += URL + '/' + IMAGE;			
+			CP_REPO_IMAGE_AND_TAG += URL + '/' + IMAGE;	
+			INCEPTION = (CP === 'mcm')?'mcm-inception':'icp-inception';
 		}
 		else{
 			arr = URL.split('/');
