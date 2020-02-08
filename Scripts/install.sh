@@ -30,6 +30,7 @@ ssh-add ~/.ssh/id_rsa
 # uninstall existing ocp if any
 if [ -d $ocp_installation_dir ]; then
 	printf '\nUNINSTALL CLUSTER ' + $cluster_name + '\n'	
+	cd $HOME/auto_deployment_tool
 	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
 	rm -rf $ocp_installation_dir
 fi

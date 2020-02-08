@@ -140,7 +140,6 @@ function taskExecute(currentTask){
 					' base_dns_domain=' + BASE_DNS_DOMAIN +
 					' region=' + REGION +
 					' ocp_pull_secret=`cat /root/tmp/ocp-install/pull-secret.txt`' + //`cat '+ dir +'/pull-secret.txt`'
-					' public_key=`cat /root/tmp/ocp-install/id_rsa.pub`' + //`cat '+ dir +'/id_rsa.pub`'
 					' provider='+ PROVIDER +
 					' ocp_installation_dir=' + OCP_DIR + CLUSTER_NAME +
 					' cs_version=' + CS_VERSION +
@@ -155,7 +154,7 @@ function taskExecute(currentTask){
 					' LICENSE=accept'
 	
 	const exec = require('child_process').execSync;
-	const myShellScript = exec(env_var + ' && sh /root/tmp/ocp-install/install.sh');
+	const myShellScript = exec(env_var + ' sh '+ dir +'/Scripts/install.sh');
 	myShellScript.stdout.on('data', (data)=>{
 		console.log(data); 
 		logfile.write(data)  // log to file
