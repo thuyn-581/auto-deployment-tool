@@ -152,7 +152,7 @@ function taskExecute(currentTask){
 					' DOCKER_PASSWORD=' + SYNERGY_PASSWD +
 					' CHART_PASSWORD=' + SYNERGY_CHART_PASSWD +
 					' LICENSE=accept'
-	cmd = env_var + ' sh '+ dir +'/Scripts/install.sh';
+	cmd = env_var + dir +'/Scripts/install.sh';
 	logfile.write('Executing command' + cmd);
 	let arr = cmd.split(" ");
 	var child = spawnSync(arr.shift(),arr);	
