@@ -23,6 +23,14 @@ echo >&2 '
 *** START ***
 *************
 '
+
+# download install client
+cd $HOME/auto_deployment_tool
+curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+
+# extract the file
+tar xvf openshift-install-$ocp_version.tar.gz
+
 # adding ssh key
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa
@@ -30,8 +38,7 @@ ssh-add ~/.ssh/id_rsa
 # uninstall existing ocp if any
 if [ -d $ocp_installation_dir ]; then
 	printf '\nUNINSTALL CLUSTER ' + $cluster_name + '\n'	
-	cd $HOME/auto_deployment_tool
-	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
+:	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
 	rm -rf $ocp_installation_dir
 fi
 
@@ -47,9 +54,6 @@ envsubst < /root/tmp/ocp-install/templates/install-config-$provider.yaml.templat
 # download install client
 cd $HOME/auto_deployment_tool
 curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
-
-# extract the file
-tar xvf openshift-install.tar.gz
 
 # deploy
 printf '\nDEPLOY OCP CLUSTER - ' + $cluster_name + '\n'	

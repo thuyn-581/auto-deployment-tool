@@ -1,7 +1,7 @@
 var express = require('express');
 var bodyParser = require("body-parser");
 var fs = require('fs');
-var { spawn } = require('child_process');
+var { spawnSync } = require('child_process');
 var superagent = require('superagent');
 var PropertiesReader = require('properties-reader');
 var properties = PropertiesReader('/root/auto_deployment_tool/secret.properties');
@@ -134,12 +134,12 @@ function taskExecute(currentTask){
 	}	
 	let logfile = fs.createWriteStream(dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
 						
-	// execute 
+	// execute install script
 	let env_var = ' env ocp_version='+ OCP_VERSION + 
 					' cluster_name=' + CLUSTER_NAME +
 					' base_dns_domain=' + BASE_DNS_DOMAIN +
 					' region=' + REGION +
-					' ocp_pull_secret=`cat /root/tmp/ocp-install/pull-secret.txt`' + //`cat '+ dir +'/pull-secret.txt`'
+					' ocp_pull_secret=`cat '+ dir +'/pull-secret.txt`' +
 					' provider='+ PROVIDER +
 					' ocp_installation_dir=' + OCP_DIR + CLUSTER_NAME +
 					' cs_version=' + CS_VERSION +
@@ -152,20 +152,18 @@ function taskExecute(currentTask){
 					' DOCKER_PASSWORD=' + SYNERGY_PASSWD +
 					' CHART_PASSWORD=' + SYNERGY_CHART_PASSWD +
 					' LICENSE=accept'
-	
-	const exec = require('child_process').execSync;
-	const myShellScript = exec(env_var + ' sh '+ dir +'/Scripts/install.sh');
-	myShellScript.stdout.on('data', (data)=>{
-		console.log(data); 
+	cmd = env_var + ' sh '+ dir +'/Scripts/install.sh';
+	logfile.write('Executing command' + cmd);
+	let arr = cmd.split(" ");
+	var child = spawnSync(arr.shift(),arr);	
+	child.stdout.on('data', (data) => {
+		//process.stdout.write(`${data}`)  // log to console
 		logfile.write(data)  // log to file
-	});
-	myShellScript.stderr.on('data', (data)=>{
-		console.error(data);
-	});
-	myShellScript.on('close', function (exitCode) { // Execution Tool exited, so do post-processing (i.e. post result to slack).
+	})	
+	child.on('close', function (exitCode) { // Execution Tool exited, so do post-processing (i.e. post result to slack).
         taskCompleted(currentTask, exitCode);
         currentTask = null;
-    });
+    });	
 }
 
 function taskCompleted(task,exitCode){
