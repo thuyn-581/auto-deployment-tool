@@ -1,19 +1,17 @@
 var express = require('express');
 var bodyParser = require("body-parser");
 var fs = require('fs');
-var { spawnSync } = require('child_process');
+var { spawn }= require('child_process');
 var superagent = require('superagent');
 var PropertiesReader = require('properties-reader');
-var properties = PropertiesReader('/root/auto_deployment_tool/secret.properties');
+var properties = PropertiesReader('/root/auto-deployment-tool/secret.properties');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
 var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
 var SYNERGY_USER = properties.get('synergy.quay.io.user');
-var	SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
-var	SYNERGY_CHART_PASSWD = properties.get('synergy.chart.password');
-
-console.log(SYNERGY_USER + SYNERGY_PASSWD + SYNERGY_CHART_PASSWD);
+var SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
+var SYNERGY_CHART_PASSWD = properties.get('synergy.chart.password');
 
 var currentTasks = []; // currently executing tasks
 var taskQueue = [];  // queue of tasks to be executed
@@ -23,13 +21,14 @@ var exitCodeMapping = {};
 exitCodeMapping[0] = 'COMPLETED';
 
 var PROVIDER,
-	REGION,
-	BASE_DNS_DOMAIN,
-	CLUSTER_NAME,
-	OCP_VERSION,
-	CS_VERSION,
-	SC_NAME;
-var	OCP_DIR = '/opt/ocp-install/';
+    REGION,
+    BASE_DNS_DOMAIN,
+    CLUSTER_NAME,
+    OCP_VERSION,
+    CS_VERSION = 'n/a',
+    SC_NAME,
+    ACM_ENABLED;
+var OCP_DIR = '/opt/ocp-install/';
 
 var app = express(); // creates a new server to listen for incoming HTTP request
 app.use(bodyParser.json());
@@ -77,7 +76,7 @@ function getTask(req, res) {
             }
         }
     }
-    if(task) {
+    if (task) {
         res.json(task).end();
     } else {
         res.status(404).end();  // can't find a match.
@@ -87,24 +86,28 @@ function getTask(req, res) {
 // queues a task to run a test.  return json object containing runId that can be used for initiator get task status.
 function queueTask(req, res) {
     var runId = 'run_id_' + new Date().getTime(); // generate a random runId.	
-
-	PROVIDER = req.body.provider;
-	REGION = req.body.region;
-	OCP_VERSION = req.body.ocpVersion;
-	CLUSTER_NAME = req.body.clusterName;
-	BASE_DNS_DOMAIN = req.body.baseDnsDomain;
-
-	CS_VERSION = req.body.acmHub.csVersion;
-	SC_NAME = req.body.acmHub.scName;	
+    PROVIDER = req.body.provider;
+    REGION = req.body.region;
+    OCP_VERSION = req.body.ocpVersion;
+    CLUSTER_NAME = req.body.clusterName;
+    BASE_DNS_DOMAIN = req.body.baseDnsDomain;
+    ACM_ENABLED = req.body.acmEnabled;
 	
-	var task = {
+    if (ACM_ENABLED === 'true'){	
+	CS_VERSION = req.body.acmHub.csVersion;
+	SC_NAME = req.body.acmHub.scName;
+    }	
+
+    var task = {
 		PROVIDER,
 		CLUSTER_NAME,
 		OCP_VERSION,
 		REGION,
+		BASE_DNS_DOMAIN,
+		ACM_ENABLED,
 		CS_VERSION,
-        runId: runId,
-        exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
+		runId: runId,
+		exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
     };
     taskQueue.push(task);
     res.json(task).end();
@@ -123,8 +126,7 @@ function processQueue() {
 }	
 
 function taskExecute(currentTask){
-	setUser(currentTask);	
-	let dir = '~/auto_deployment_tool';
+	let dir = '/root/auto-deployment-tool';
 	let cmd ='';
 	
 	// create logs folfer if not exists
@@ -134,36 +136,39 @@ function taskExecute(currentTask){
 	}	
 	let logfile = fs.createWriteStream(dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
 						
-	// execute install script
-	let env_var = ' env ocp_version='+ OCP_VERSION + 
-					' cluster_name=' + CLUSTER_NAME +
-					' base_dns_domain=' + BASE_DNS_DOMAIN +
-					' region=' + REGION +
-					' ocp_pull_secret=`cat '+ dir +'/pull-secret.txt`' +
-					' provider='+ PROVIDER +
-					' ocp_installation_dir=' + OCP_DIR + CLUSTER_NAME +
-					' cs_version=' + CS_VERSION +
-					' acm_installation_dir=' + OCP_DIR + CLUSTER_NAME + '/acm-'+ CS_VERSION +'-' + PROVIDER +
-					' DEFAULT_STORAGE_CLASS=' + SC_NAME +
-					' DEFAULT_ADMIN_USERNAME=admin' +
-					' DEFAULT_ADMIN_PASSWORD=admin' +
-					' PASSWORD_RULES=\'(.*)\'' + 
-					' DOCKER_USERNAME=' + SYNERGY_USER +
-					' DOCKER_PASSWORD=' + SYNERGY_PASSWD +
-					' CHART_PASSWORD=' + SYNERGY_CHART_PASSWD +
-					' LICENSE=accept'
-	cmd = env_var + dir +'/Scripts/install.sh';
-	logfile.write('Executing command' + cmd);
-	let arr = cmd.split(" ");
-	var child = spawnSync(arr.shift(),arr);	
+	// set ocp variables
+	var env = Object.create( process.env );
+	env.ocp_version = OCP_VERSION;
+	env.cluster_name = CLUSTER_NAME;
+	env.base_dns_domain = BASE_DNS_DOMAIN;
+	env.region = REGION;
+	env.provider = PROVIDER;
+	env.ocp_installation_dir = OCP_DIR + CLUSTER_NAME;
+	env.acm_enabled = ACM_ENABLED
+	
+	// set acm varriables
+	if (ACM_ENABLED === 'true'){
+		env.COMMON_SERVICE_VERSION=CS_VERSION;
+		env.acm_installation_dir=OCP_DIR + CLUSTER_NAME + '/acm-'+ CS_VERSION +'-' + PROVIDER;
+		env.DEFAULT_STORAGE_CLASS=SC_NAME;
+		env.DEFAULT_ADMIN_USERNAME='admin';
+		env.DEFAULT_ADMIN_PASSWORD='admin';
+		env.PASSWORD_RULES='(.*)';
+		env.DOCKER_USERNAME=SYNERGY_USER;
+		env.DOCKER_PASSWORD=SYNERGY_PASSWD;
+		env.CHART_PASSWORD=SYNERGY_CHART_PASSWD;
+		env.LICENSE='accept';
+	}	
+	//console.log(env)
+	var child = spawn('sh',['/root/auto-deployment-tool/Scripts/install.sh'],{ env:env, shell:true, stdio:['inherit','pipe','pipe'] });
 	child.stdout.on('data', (data) => {
 		//process.stdout.write(`${data}`)  // log to console
 		logfile.write(data)  // log to file
 	})	
 	child.on('close', function (exitCode) { // Execution Tool exited, so do post-processing (i.e. post result to slack).
-        taskCompleted(currentTask, exitCode);
-        currentTask = null;
-    });	
+	        taskCompleted(currentTask, exitCode);
+	        currentTask = null;
+        });	
 }
 
 function taskCompleted(task,exitCode){
@@ -171,11 +176,17 @@ function taskCompleted(task,exitCode){
 	if ( exitStatus !== 'Cancelled'){
 	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
 		const execSync = require('child_process').execSync;
-		const cmd = 'tac /root/auto_deployment_tool/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
+		const cmd = 'tac /root/auto-deployment-tool/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
 	
 		if (exitCodeMapping[exitCode]) {        
-			const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
-			exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
+			if (ACM_ENABLED === 'true'){
+				const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
+				exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
+			}
+			else{
+				exitStatus = 'Access the OpenShift web-console: https://console-openshift-console.apps.'+ task.CLUSTER_NAME + '.' + task.BASE_DNS_DOMAIN
+							+ '\nLogin to the console with user: ocpadmin, password: Test4ACM';
+			}
 		}
 		else {
 			const stdout = execSync(cmd +' | grep TASK | head -1');
@@ -202,8 +213,13 @@ function taskCompleted(task,exitCode){
 }
 
 function sendSlackMessage(task) {
-	var cloudpak = (task.CP === 'cs')? 'Common services': task.CP.toUpperCase();
-    var message = 'Cluster: *'+ task.CLUSTER_NAME +'* -- Installed Cloud Pak: *'+ cloudpak +' v'+ task.VERSION +'*\n```' +task.exitStatus + '```';
+	var message = '';
+	if (ACM_ENABLED === 'true'){
+	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- Installed MCM *'+ ' v'+ task.CS_VERSION +'*\n```' +task.exitStatus + '```';
+	}
+	else {
+	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- OpenShift version *'+ ' v'+ task.OCP_VERSION +'*\n```' +task.exitStatus + '```';
+	}
     var body = {text: message}; // Slack requires message to be in a JSON object using text attribute.
 
     //console.log('Posting message to slack: ', message);
@@ -220,17 +236,6 @@ function sendSlackMessage(task) {
             }
         });
 }
-
-function setUser(task) {
-	switch(task.PROVIDER){
-		case '':
-			user = 'root';
-			break;
-		default:
-			user = 'root';
-			break;
-	}
-}
 	
-app.listen(8888);
-console.log("server starting on port: " + 8888);
+app.listen(5555);
+console.log("server starting on port: " + 5555);

@@ -26,7 +26,7 @@ echo >&2 '
 
 # download install client
 cd $HOME/auto_deployment_tool
-curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/$ocp_version/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
 
 # extract the file
 tar xvf openshift-install-$ocp_version.tar.gz
@@ -37,32 +37,56 @@ ssh-add ~/.ssh/id_rsa
 
 # uninstall existing ocp if any
 if [ -d $ocp_installation_dir ]; then
-	printf '\nUNINSTALL CLUSTER ' + $cluster_name + '\n'	
-:	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
+	printf "\nDESTROY EXISTING CLUSTER - $cluster_name \n"	
+	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
 	rm -rf $ocp_installation_dir
 fi
 
 # export publick key
+export ocp_pull_secret=`cat /root/auto_deployment_tool/pull-secret.txt`
 export public_key=`cat ~/.ssh/id_rsa.pub`
 
 # create installation directory
-mkdir -p $ocp_installation_dir/$cluster_name
+mkdir -p $ocp_installation_dir
 
 # populate config file
-envsubst < /root/tmp/ocp-install/templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
-
-# download install client
-cd $HOME/auto_deployment_tool
-curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+envsubst < /root/auto_deployment_tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
 
 # deploy
-printf '\nDEPLOY OCP CLUSTER - ' + $cluster_name + '\n'	
+printf "\nDEPLOY OCP CLUSTER - $cluster_name \n"	
 ./openshift-install create cluster --dir=$ocp_installation_dir --log-level=info
 
-# install mcm manifest
-printf '\nINSTALL ACM MANIFEST\n'	
-sh $HOME/auto_deployment_tool/Scripts/manifest.sh
+# export config
+export KUBECONFIG=$ocp_installation_dir/auth/kubeconfig
 
+# add user admin
+printf "\nADD ocpadmin USER\n"
+oc create user ocpadmin
+kubectl create clusterrolebinding permissive-binding --clusterrole=cluster-admin --user=ocpadmin --group=system:serviceaccounts
+htpasswd -c -B -b $ocp_installation_dir/users.htpasswd ocpadmin Test4ACM
+oc create secret generic htpass-secret --from-file=htpasswd=$ocp_installation_dir/users.htpasswd -n openshift-config
+oc apply -f $HOME/auto_deployment_tool/Templates/htpasswd-cr.yaml
+
+# install mcm manifest
+if [[ $acm_enabled = "true" ]]; then
+	printf "\nINSTALL ACM MANIFEST - VERSION $COMMON_SERVICE_VERSION \n"	
+
+	# get worker nodes
+	export nodes=($(kubectl get nodes | awk '{if($3 == "worker") print $1;}'))
+	export DEFAULT_DEDICATED_NODES="${nodes[0]} ${nodes[1]} ${nodes[2]}"
+	echo $nodes
+	echo $DEFAULT_DEDICATED_NODES
+	
+	# clone manifest repo
+	mkdir $acm_installation_dir
+	cd $acm_installation_dir
+	git clone git@github.com:rh-ibm-synergy/cp4mcm-manifest.git
+	cd cp4mcm-manifest
+	make use-synergy
+
+	# start deploy
+	sh start.sh
+fi
 
 #---------------------------------
 trap : 0
