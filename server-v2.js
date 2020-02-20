@@ -20,6 +20,7 @@ var completedTasks = []; // recently completed executions
 var exitCodeMapping = {};
 exitCodeMapping[0] = 'COMPLETED';
 
+var root_dir = '/root/auto-deployment-tool';
 var PROVIDER,
     REGION,
     BASE_DNS_DOMAIN,
@@ -86,7 +87,21 @@ function getTask(req, res) {
 // queues a task to run a test.  return json object containing runId that can be used for initiator get task status.
 function queueTask(req, res) {
     var runId = 'run_id_' + new Date().getTime(); // generate a random runId.	
-    PROVIDER = req.body.provider;
+	
+	PROVIDER = req.body.provider.name;
+	switch(PROVIDER) {
+		case 'aws':
+			KEY_ID = req.body.provider.keyId;
+			KEY_SECRET = req.body.provider.keySecret;
+			break;
+		case 'azure':
+			APP_ID = req.body.provider.appId;
+			APP_SECRET = req.body.provider.appSecret;
+			break;
+		default:
+			break;
+	}
+
     REGION = req.body.region;
     OCP_VERSION = req.body.ocpVersion;
     CLUSTER_NAME = req.body.clusterName;
@@ -128,6 +143,9 @@ function processQueue() {
 function taskExecute(currentTask){
 	let dir = '/root/auto-deployment-tool';
 	let cmd ='';
+	
+	//generateCredentialFiles
+	generateCredentialFiles(PROVIDER);
 	
 	// create logs folfer if not exists
 	if (!fs.existsSync(dir +'/logs')){
@@ -235,6 +253,29 @@ function sendSlackMessage(task) {
                 console.log('Unexpected response from slack.  status: ' + res.status + ' body: ', res.body);
             }
         });
+}
+
+function generateCredentialFiles(provider){ 
+	let content = '';
+	switch(provider) {
+	case 'aws':
+		content = '[default]\n'+
+					'aws_access_key_id=' + KEY_ID + '\n' +
+					'aws_secret_access_key=' + KEY_SECRET + '\n'
+		fs.writeFileSync('~/.aws/credentials',content, (err))
+		break;
+	case 'azure':
+		content = '{"subscriptionId":"0e0a4287-8719-4849-bb0b-5242e4507709",' +
+					'"clientId":"' + APP_ID + '",' +
+					'"clientSecret":"' + APP_SECRET + '",' +
+					'"tenantId":"90df2ccb-9053-40b8-9518-cc8835f62f7f"}'
+		fs.writeFileSync('~/.azure/osServicePrincipal.json',content, (err))
+		break;
+	default:
+		break;
+	}
+	
+
 }
 	
 app.listen(5555);

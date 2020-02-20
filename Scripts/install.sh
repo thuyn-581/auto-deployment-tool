@@ -24,20 +24,24 @@ echo >&2 '
 *************
 '
 
-# download install client
 cd $HOME/auto_deployment_tool
-curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/$ocp_version/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
-
-# extract the file
-tar xvf openshift-install-$ocp_version.tar.gz
+if [ ! -d ./install-client/$ocp_version ]; then
+	mkdir -p ./install-client/$ocp_version
+	# download install client	
+	cd ./install-client/$ocp_version
+	curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/$ocp_version/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+	# extract the file
+	tar xvf openshift-install-$ocp_version.tar.gz
+fi
 
 # adding ssh key
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa
 
 # uninstall existing ocp if any
+cd $HOME/auto_deployment_tool/install-client/$ocp_version
 if [ -d $ocp_installation_dir ]; then
-	printf "\nDESTROY EXISTING CLUSTER - $cluster_name \n"	
+	printf "\nDESTROY EXISTING CLUSTER - $cluster_name \n"		
 	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
 	rm -rf $ocp_installation_dir
 fi
