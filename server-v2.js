@@ -187,7 +187,7 @@ function taskExecute(currentTask){
 	}	
 	
 	//console.log(env)
-	var child = spawn('sh',['/root/auto-deployment-tool/Scripts/install.sh'],{ env:env, shell:true, stdio:['inherit','pipe','pipe'] });
+	var child = spawn('sh',['/root/auto-deployment-tool/Scripts/install.sh'],{ env:env, shell:true, stdio:'pipe' });
 	child.stdout.on('data', (data) => {
 		//process.stdout.write(`${data}`)  // log to console
 		logfile.write(data)  // log to file
@@ -271,14 +271,14 @@ function generateCredentialFiles(provider){
 		content = '[default]\n'+
 					'aws_access_key_id=' + KEY_ID + '\n' +
 					'aws_secret_access_key=' + KEY_SECRET + '\n'
-		fs.writeFileSync('/root/.aws/credentials',content, (err))
+		fs.writeFileSync('/root/.aws/credentials',content)
 		break;
 	case 'azure':
 		content = '{"subscriptionId":"' + SUBS_ID + '",' +
 					'"clientId":"' + APP_ID + '",' +
 					'"clientSecret":"' + APP_SECRET + '",' +
 					'"tenantId":"' + TENANT_ID + '"}'
-		fs.writeFileSync('/root/.azure/osServicePrincipal.json',content, (err))
+		fs.writeFileSync('/root/.azure/osServicePrincipal.json',content)
 		break;
 	default:
 		break;

@@ -38,12 +38,8 @@ platform:
   aws:
     region: ${region}
     userTags:
-      owner: thuy.n.nguyen@ibm.com
+      owner: thnguyen@redhat.com
       cluster: ${cluster_name}
-      team: ICPMCM
-      Usage: Temp
-      Usage_desc: "Development environment for ICP on OpenShift"
-      Review_freq: Week
 
 pullSecret: '${ocp_pull_secret}'
 sshKey: |

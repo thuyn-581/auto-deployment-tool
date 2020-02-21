@@ -72,7 +72,7 @@ oc create secret generic htpass-secret --from-file=htpasswd=$ocp_installation_di
 oc apply -f $HOME/auto-deployment-tool/Templates/htpasswd-cr.yaml
 
 # azure tagging
-if [[ $provider = "aws" ]]; then
+if [[ $provider = "azure" ]]; then
 	sh $HOME/auto-deployment-tool/Scripts/azure-tagging.sh
 fi
 
