@@ -36,7 +36,6 @@ app.use(bodyParser.json());
 app.get('/status', getStatus);  // server GET request for /status end-point to show state of this launcher app.
 app.post('/run', queueTask); // server POST request to /run end-point.  Allows someone (or something) to initiate execution.
 app.get('/task', getTask); // server GET request for /task end-point.  Allows initiator to know when their task completes.
-//app.put('/kill',cancelTask); // server PUT request for /task end-point.  Allows initiator to cancel when their executing task.
 
 setInterval(processQueue, 3000); // start main interval that checks queue for task to run.
 
@@ -97,6 +96,8 @@ function queueTask(req, res) {
 		case 'azure':
 			APP_ID = req.body.provider.appId;
 			APP_SECRET = req.body.provider.appSecret;
+			SUBS_ID = req.body.provider.subscriptionId;
+			TENANT_ID = req.body.provider.tenantId;
 			break;
 		default:
 			break;
@@ -164,6 +165,13 @@ function taskExecute(currentTask){
 	env.ocp_installation_dir = OCP_DIR + CLUSTER_NAME;
 	env.acm_enabled = ACM_ENABLED
 	
+	// set azure ids
+	if (PROVIDER === 'azure'){
+		env.azure_client_id = APP_ID;
+		env.azure_client_secret = APP_SECRET;
+		env.azure_tenant_id = TENANT_ID;
+	}
+	
 	// set acm varriables
 	if (ACM_ENABLED === 'true'){
 		env.COMMON_SERVICE_VERSION=CS_VERSION;
@@ -177,6 +185,7 @@ function taskExecute(currentTask){
 		env.CHART_PASSWORD=SYNERGY_CHART_PASSWD;
 		env.LICENSE='accept';
 	}	
+	
 	//console.log(env)
 	var child = spawn('sh',['/root/auto-deployment-tool/Scripts/install.sh'],{ env:env, shell:true, stdio:['inherit','pipe','pipe'] });
 	child.stdout.on('data', (data) => {
@@ -262,14 +271,14 @@ function generateCredentialFiles(provider){
 		content = '[default]\n'+
 					'aws_access_key_id=' + KEY_ID + '\n' +
 					'aws_secret_access_key=' + KEY_SECRET + '\n'
-		fs.writeFileSync('~/.aws/credentials',content, (err))
+		fs.writeFileSync('/root/.aws/credentials',content, (err))
 		break;
 	case 'azure':
-		content = '{"subscriptionId":"0e0a4287-8719-4849-bb0b-5242e4507709",' +
+		content = '{"subscriptionId":"' + SUBS_ID + '",' +
 					'"clientId":"' + APP_ID + '",' +
 					'"clientSecret":"' + APP_SECRET + '",' +
-					'"tenantId":"90df2ccb-9053-40b8-9518-cc8835f62f7f"}'
-		fs.writeFileSync('~/.azure/osServicePrincipal.json',content, (err))
+					'"tenantId":"' + TENANT_ID + '"}'
+		fs.writeFileSync('/root/.azure/osServicePrincipal.json',content, (err))
 		break;
 	default:
 		break;

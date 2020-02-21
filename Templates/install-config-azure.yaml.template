@@ -41,7 +41,7 @@ networking:
 platform:
   azure:
     baseDomainResourceGroupName: openshift4-terraform
-    region: eastus
+    region: ${region}
 
 pullSecret: '${ocp_pull_secret}'
 sshKey: |

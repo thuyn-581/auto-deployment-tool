@@ -24,7 +24,7 @@ echo >&2 '
 *************
 '
 
-cd $HOME/auto_deployment_tool
+cd $HOME/auto-deployment-tool
 if [ ! -d ./install-client/$ocp_version ]; then
 	mkdir -p ./install-client/$ocp_version
 	# download install client	
@@ -39,7 +39,7 @@ eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa
 
 # uninstall existing ocp if any
-cd $HOME/auto_deployment_tool/install-client/$ocp_version
+cd $HOME/auto-deployment-tool/install-client/$ocp_version
 if [ -d $ocp_installation_dir ]; then
 	printf "\nDESTROY EXISTING CLUSTER - $cluster_name \n"		
 	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
@@ -47,14 +47,14 @@ if [ -d $ocp_installation_dir ]; then
 fi
 
 # export publick key
-export ocp_pull_secret=`cat /root/auto_deployment_tool/pull-secret.txt`
+export ocp_pull_secret=`cat /root/auto-deployment-tool/pull-secret.txt`
 export public_key=`cat ~/.ssh/id_rsa.pub`
 
 # create installation directory
 mkdir -p $ocp_installation_dir
 
 # populate config file
-envsubst < /root/auto_deployment_tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
+envsubst < /root/auto-deployment-tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
 
 # deploy
 printf "\nDEPLOY OCP CLUSTER - $cluster_name \n"	
@@ -69,7 +69,12 @@ oc create user ocpadmin
 kubectl create clusterrolebinding permissive-binding --clusterrole=cluster-admin --user=ocpadmin --group=system:serviceaccounts
 htpasswd -c -B -b $ocp_installation_dir/users.htpasswd ocpadmin Test4ACM
 oc create secret generic htpass-secret --from-file=htpasswd=$ocp_installation_dir/users.htpasswd -n openshift-config
-oc apply -f $HOME/auto_deployment_tool/Templates/htpasswd-cr.yaml
+oc apply -f $HOME/auto-deployment-tool/Templates/htpasswd-cr.yaml
+
+# azure tagging
+if [[ $provider = "aws" ]]; then
+	sh $HOME/auto-deployment-tool/Scripts/azure-tagging.sh
+fi
 
 # install mcm manifest
 if [[ $acm_enabled = "true" ]]; then
