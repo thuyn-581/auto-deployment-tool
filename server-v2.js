@@ -199,7 +199,7 @@ function taskExecute(currentTask){
 }
 
 function taskCompleted(task,exitCode){
-	var exitStatus = task.exitStatus;
+	let exitStatus = task.exitStatus;
 	if ( exitStatus !== 'Cancelled'){
 	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
 		const execSync = require('child_process').execSync;
@@ -207,7 +207,7 @@ function taskCompleted(task,exitCode){
 	
 		if (exitCodeMapping[exitCode]) {        
 			if (ACM_ENABLED === 'true'){
-				const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
+				const stdout = execSync(cmd +' | grep "Connect to MCM at" | head -1');
 				exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
 			}
 			else{

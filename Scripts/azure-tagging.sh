@@ -9,7 +9,7 @@ fi
 echo "Login Successful"
 
 echo "Using the Azure CLI to find OpenShift Cluster Resource Group"
-resource_group_name=$(az group list | sed -n 's/\s*"name":\s*"\(${cluster_name}-.*-rg\)",/\1/p')
+resource_group_name=$(az group list | sed -n 's/\s*"name":\s*"\('${cluster_name}'-.*-rg\)",/\1/p')
 if [[ -z "$resource_group_name" ]]; then
     echo "Resource group not found for tagging, exiting."
     exit 1
