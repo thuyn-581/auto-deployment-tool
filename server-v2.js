@@ -110,8 +110,8 @@ function queueTask(req, res) {
     ACM_ENABLED = req.body.acmEnabled;
 	
     if (ACM_ENABLED === 'true'){	
-	CS_VERSION = req.body.acmHub.csVersion;
-	SC_NAME = req.body.acmHub.scName;
+		CS_VERSION = req.body.acmHub.csVersion;
+		SC_NAME = req.body.acmHub.scName;
     }	
 
     var task = {
@@ -241,7 +241,7 @@ function taskCompleted(task,exitCode){
 
 function sendSlackMessage(task) {
 	var message = '';
-	if (ACM_ENABLED === 'true'){
+	if (task.ACM_ENABLED === 'true'){
 	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- Installed MCM *'+ ' v'+ task.CS_VERSION +'*\n```' +task.exitStatus + '```';
 	}
 	else {
