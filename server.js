@@ -1,17 +1,17 @@
 var express = require('express');
 var bodyParser = require("body-parser");
 var fs = require('fs');
-var { spawn } = require('child_process');
+var { spawn }= require('child_process');
 var superagent = require('superagent');
 var PropertiesReader = require('properties-reader');
-var properties = PropertiesReader('/root/auto_deployment_tool/secret.properties');
+var properties = PropertiesReader(process.env['HOME'] + '/auto-deployment-tool/secret.properties');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
-var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
+var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
-var ARTIFACTORY_USER= properties.get('artifact.user');
-var ARTIFACTORY_TOKEN=properties.get('artifact.token')
-
+var SYNERGY_USER = properties.get('synergy.quay.io.user');
+var SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
+var SYNERGY_CHART_PASSWD = properties.get('synergy.chart.password');
 
 var currentTasks = []; // currently executing tasks
 var taskQueue = [];  // queue of tasks to be executed
@@ -20,36 +20,22 @@ var completedTasks = []; // recently completed executions
 var exitCodeMapping = {};
 exitCodeMapping[0] = 'COMPLETED';
 
-var ARCH;
-var PROVIDER;
-var pwd;
-var infNode; 
-var CLUSTER_NAME;
-var VERSION;
-var URL;
-var CP_DIR;
-var PROXY_NODE;
-var MGMT_NODE;
-var SC_NAME='';
-var CP;
-var INCEPTION='';
-var IMAGE='';
-var STAGE='release';
-var MANIFEST='offline';
-var MASTER_NODE;
-var WORKER_NODE='';
-
-
-var CP_REPO_IMAGE_AND_TAG = 'https://na.artifactory.swg-devops.com/artifactory';
-var SCRIPT_NAME;
-var user='root';
+var home_dir = process.env['HOME'] + '/auto-deployment-tool';
+var PROVIDER,
+    REGION,
+    BASE_DNS_DOMAIN,
+    CLUSTER_NAME,
+    OCP_VERSION,
+    CS_VERSION = 'n/a',
+    SC_NAME,
+    ACM_ENABLED;
+var OCP_DIR = process.env['HOME'] + '/ocp-install/';
 
 var app = express(); // creates a new server to listen for incoming HTTP request
 app.use(bodyParser.json());
 app.get('/status', getStatus);  // server GET request for /status end-point to show state of this launcher app.
 app.post('/run', queueTask); // server POST request to /run end-point.  Allows someone (or something) to initiate execution.
 app.get('/task', getTask); // server GET request for /task end-point.  Allows initiator to know when their task completes.
-app.put('/kill',cancelTask); // server PUT request for /task end-point.  Allows initiator to cancel when their executing task.
 
 setInterval(processQueue, 3000); // start main interval that checks queue for task to run.
 
@@ -73,7 +59,6 @@ function getStatus(req, res) {
 function getTask(req, res) {
     var runId = req.query['runId'];
     var task;
-
     if (runId) {
 		for (var i = 0; i < currentTasks.length && !task; i++) {
             if(currentTasks[i].runId === runId) {
@@ -91,98 +76,54 @@ function getTask(req, res) {
             }
         }
     }
-
-    if(task) {
+    if (task) {
         res.json(task).end();
     } else {
         res.status(404).end();  // can't find a match.
     }
 }
 
-function cancelTask(req, res) {
-	var runId = req.query['runId'];
-    var task;	
-
-    if (runId) {
-		for (var i = 0; i < currentTasks.length && !task; i++) {
-           if(currentTasks[i].runId === runId) {
-                task = currentTasks[i];
-            }
-        }
-		if(task) {
-			// send kill signal
-			setUser(task);
-			let cmd = 'sshpass -p'+ pwd +
-				' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + task.infNode +
-				' \"ps -ef | grep -v grep | grep _deploy_ | awk \'{print $2}\' |xargs kill\"';
-			require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
-			task.exitStatus = 'Cancelled';
-			res.json(task).end();
-			
-			// Remove task from executing queue
-			currentTasks.splice(currentTasks.indexOf(task),1);
-			taskCompleted(task);
-		} else {
-			res.status(404).end();  // can't find a match.
-		}
-	}	
-}
-
 // queues a task to run a test.  return json object containing runId that can be used for initiator get task status.
 function queueTask(req, res) {
     var runId = 'run_id_' + new Date().getTime(); // generate a random runId.	
-	CP_REPO_IMAGE_AND_TAG = 'https://na.artifactory.swg-devops.com/artifactory/';
 	
-	ARCH = req.body.arch;
-	PROVIDER = req.body.provider;
-	pwd = req.body.shellPwd;
-	CP = req.body.cloudpak;		
-	URL = req.body.url;	
-	VERSION = req.body.version;
+	PROVIDER = req.body.provider.name;
+	switch(PROVIDER) {
+		case 'aws':
+			KEY_ID = req.body.provider.keyId;
+			KEY_SECRET = req.body.provider.keySecret;
+			break;
+		case 'azure':
+			APP_ID = req.body.provider.appId;
+			APP_SECRET = req.body.provider.appSecret;
+			SUBS_ID = req.body.provider.subscriptionId;
+			TENANT_ID = req.body.provider.tenantId;
+			break;
+		default:
+			break;
+	}
 
-	CLUSTER_NAME = req.body.cluster.name;
-	infNode = req.body.cluster.infNode;	
-	PROXY_NODE = req.body.cluster.proxyNode;
-	MGMT_NODE = req.body.cluster.managementNode;
+    REGION = req.body.region;
+    OCP_VERSION = req.body.ocpVersion;
+    CLUSTER_NAME = req.body.clusterName;
+    BASE_DNS_DOMAIN = req.body.baseDnsDomain;
+    ACM_ENABLED = req.body.acmEnabled;
 	
-	var arr = URL.split('-');	
-	if (CP !== 'icp'){
-		SC_NAME = req.body.cluster.scName;
-		MASTER_NODE = req.body.cluster.masterNode;
-		STAGE = arr[3];
-		MANIFEST = req.body.manifest;
-		SCRIPT_NAME = 'cp_deploy_'+ MANIFEST +'-'+ ARCH +'.sh';
-		if (MANIFEST === 'offline'){
-			IMAGE = (CP === 'mcm')?'ibm-cp4mcm-core-'+ arr[6] +'-'+ ARCH +'.tar.gz':
-									'common-services-'+ arr[6] +'-'+ ARCH +'.tar.gz';
-			CP_REPO_IMAGE_AND_TAG += URL + '/' + IMAGE;	
-			INCEPTION = (CP === 'mcm')?'mcm-inception':'icp-inception';
-		}
-		else{
-			arr = URL.split('/');
-			INCEPTION = arr[2];
-			CP_REPO_IMAGE_AND_TAG = arr[0]+'.artifactory.swg-devops.com/'+arr[1]+'/'+arr[2]+':'+VERSION;
-		}
-	}
-	else {
-		MASTER_NODE = infNode;
-		WORKER_NODE = req.body.cluster.workerNode;
-		SCRIPT_NAME = 'icp_deploy.sh';
-		IMAGE = 'ibm-cloud-private-x86_64-' + VERSION +'.tar.gz';
-		CP_REPO_IMAGE_AND_TAG += URL + '/' + IMAGE;
-	}
-    
-	var task = {
+    if (ACM_ENABLED === 'true'){	
+		CS_VERSION = req.body.acmHub.csVersion;
+		SC_NAME = req.body.acmHub.scName;
+    }	
+
+    var task = {
 		PROVIDER,
-		CP,
-		SCRIPT_NAME,
-		CP_REPO_IMAGE_AND_TAG,
 		CLUSTER_NAME,
-		STAGE,
-		infNode,
-		VERSION,
-        runId: runId,
-        exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
+		OCP_VERSION,
+		REGION,
+		BASE_DNS_DOMAIN,
+		ACM_ENABLED,
+		CS_VERSION,
+		runId: runId,
+		exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
     };
     taskQueue.push(task);
     res.json(task).end();
@@ -193,94 +134,86 @@ function processQueue() {
     if(taskQueue.length === 0) {
         return;
     }
-	
-	CP_DIR = '/opt/ibm-cloudpak/' + CP + '-' + STAGE + '_' + VERSION +'_' + MANIFEST
-		
 	// pull first task off the queue and run it.
     let task = taskQueue.shift();	
     console.log('Running task.  runId: ' + task.runId + ' - cluster: '+ task.CLUSTER_NAME);
-	
 	currentTasks.unshift(task);
 	taskExecute(task);
 }	
 
 function taskExecute(currentTask){
-	setUser(currentTask);	
-	let dir = '/root/auto_deployment_tool';
+	//let dir = '/root/auto-deployment-tool';
 	let cmd ='';
-	let prefix = (CP === 'icp')? 'icp':'cp';
+	
+	//generateCredentialFiles
+	generateCredentialFiles(PROVIDER);
 	
 	// create logs folfer if not exists
-	if (!fs.existsSync(dir +'/logs')){
-		cmd = 'mkdir -p '+ dir +'/logs';
+	if (!fs.existsSync(home_dir +'/logs')){
+		cmd = 'mkdir -p '+ home_dir +'/logs';
 		require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 	}	
-	let logfile = fs.createWriteStream(dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
+	let logfile = fs.createWriteStream(home_dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
+						
+	// set ocp variables
+	var env = Object.create( process.env );
+	env.ocp_version = OCP_VERSION;
+	env.cluster_name = CLUSTER_NAME;
+	env.base_dns_domain = BASE_DNS_DOMAIN;
+	env.region = REGION;
+	env.provider = PROVIDER;
+	env.ocp_installation_dir = OCP_DIR + CLUSTER_NAME;
+	env.acm_enabled = ACM_ENABLED
 	
-	// copy executitng scripts to target node	
-	cmd = 'sshpass -p'+ pwd +
-			' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + currentTask.infNode +
-			' mkdir -p ~/deploy';
-	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
-				
-	cmd = 'sshpass -p'+ pwd +
-			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ dir +'/Scripts/'+ prefix +'_* '+ user +'@'+ currentTask.infNode +':~/deploy';
-	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
+	// set azure ids
+	if (PROVIDER === 'azure'){
+		env.azure_client_id = APP_ID;
+		env.azure_client_secret = APP_SECRET;
+		env.azure_tenant_id = TENANT_ID;
+	}
 	
-	cmd = 'sshpass -p'+ pwd +
-			'  scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ dir +'/Templates/'+ prefix +'_* '+ user +'@'+ currentTask.infNode +':~/deploy';
-	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
+	// set acm varriables
+	if (ACM_ENABLED === 'true'){
+		env.COMMON_SERVICE_VERSION=CS_VERSION;
+		env.acm_installation_dir=OCP_DIR + CLUSTER_NAME + '/acm-'+ CS_VERSION +'-' + PROVIDER;
+		env.DEFAULT_STORAGE_CLASS=SC_NAME;
+		env.DEFAULT_ADMIN_USERNAME='admin';
+		env.DEFAULT_ADMIN_PASSWORD='admin';
+		env.PASSWORD_RULES='(.*)';
+		env.DOCKER_USERNAME=SYNERGY_USER;
+		env.DOCKER_PASSWORD=SYNERGY_PASSWD;
+		env.CHART_PASSWORD=SYNERGY_CHART_PASSWD;
+		env.LICENSE='accept';
+	}	
 	
-	// add exec permission
-	cmd = 'sshpass -p'+ pwd +
-				' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' + currentTask.infNode + 
-				' chmod +x ~/deploy/'+ currentTask.SCRIPT_NAME;
-	require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
-								
-	// execute scripts at target node
-	let env_var = ' env CP='+ CP + 
-					' IMAGE=' + IMAGE +
-					' VERSION=' + VERSION +
-					' STAGE=' + STAGE +
-					' MANIFEST=' + MANIFEST +
-					' INCEPTION=' + INCEPTION +
-					' CP_DIR='+ CP_DIR +
-					' ARTIFACTORY_USER=' + ARTIFACTORY_USER +
-					' ARTIFACTORY_TOKEN=' + ARTIFACTORY_TOKEN +
-					' MASTER_NODE=' + MASTER_NODE +
-					' WORKER_NODE=' + WORKER_NODE +
-					' PROXY_NODE=' + PROXY_NODE +
-					' MGMT_NODE=' + MGMT_NODE + 
-					' SC_NAME=' + SC_NAME +
-					' CP_REPO_IMAGE_AND_TAG=' + CP_REPO_IMAGE_AND_TAG
-	cmd = 'sshpass -p'+ pwd +' ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no '+ user +'@' +
-				infNode + env_var +' ~/deploy/'+ SCRIPT_NAME;
-	//console.log(cmd);
-	logfile.write('Executing command' + cmd);
-	let arr = cmd.split(" ");
-	var child = spawn(arr.shift(),arr);
-	
+	//console.log(env)
+	var child = spawn('sh',[home_dir + '/Scripts/install.sh'],{ env:env, shell:true, stdio:'pipe' });
 	child.stdout.on('data', (data) => {
 		//process.stdout.write(`${data}`)  // log to console
 		logfile.write(data)  // log to file
-	})
-	
+	})	
 	child.on('close', function (exitCode) { // Execution Tool exited, so do post-processing (i.e. post result to slack).
-        taskCompleted(currentTask, exitCode);
-        currentTask = null;
-    });	
+	        taskCompleted(currentTask, exitCode);
+	        currentTask = null;
+        });	
 }
 
 function taskCompleted(task,exitCode){
-	var exitStatus = task.exitStatus;
+	let exitStatus = task.exitStatus;
 	if ( exitStatus !== 'Cancelled'){
 	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
 		const execSync = require('child_process').execSync;
-		const cmd = 'tac /root/auto_deployment_tool/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
+		const cmd = 'tac '+ home_dir +'/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
 	
 		if (exitCodeMapping[exitCode]) {        
-			const stdout = execSync(cmd +' | grep "Dashboard URL" | head -1');
-			exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
+			if (ACM_ENABLED === 'true'){
+				const stdout = execSync(cmd +' | grep "Connect to MCM at" | head -1');
+				exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
+			}
+			else{
+				exitStatus = 'Access the OpenShift web-console: https://console-openshift-console.apps.'+ task.CLUSTER_NAME + '.' + task.BASE_DNS_DOMAIN
+							+ '\nLogin to the console with user: ocpadmin, password: Test4ACM';
+			}
 		}
 		else {
 			const stdout = execSync(cmd +' | grep TASK | head -1');
@@ -307,8 +240,13 @@ function taskCompleted(task,exitCode){
 }
 
 function sendSlackMessage(task) {
-	var cloudpak = (task.CP === 'cs')? 'Common services': task.CP.toUpperCase();
-    var message = 'Cluster: *'+ task.CLUSTER_NAME +'* -- Installed Cloud Pak: *'+ cloudpak +' v'+ task.VERSION +'*\n```' +task.exitStatus + '```';
+	var message = '';
+	if (task.ACM_ENABLED === 'true'){
+	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- Installed MCM *'+ ' v'+ task.CS_VERSION +'*\n```' +task.exitStatus + '```';
+	}
+	else {
+	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- OpenShift version *'+ ' v'+ task.OCP_VERSION +'*\n```' +task.exitStatus + '```';
+	}
     var body = {text: message}; // Slack requires message to be in a JSON object using text attribute.
 
     //console.log('Posting message to slack: ', message);
@@ -326,17 +264,33 @@ function sendSlackMessage(task) {
         });
 }
 
-function setUser(task) {
-	switch(task.PROVIDER){
-		case '':
-			user = 'root';
-			break;
-		default:
-			user = 'root';
-			break;
+function generateCredentialFiles(provider){ 
+	let content = '';
+	// create credential folfer if not exists
+	if (!fs.existsSync(process.env['HOME'] +'/.' + provider)){
+		cmd = 'mkdir -p '+ process.env['HOME'] + '/.' + provider;
+		require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 	}
+	switch(provider) {
+	case 'aws':
+		content = '[default]\n'+
+					'aws_access_key_id=' + KEY_ID + '\n' +
+					'aws_secret_access_key=' + KEY_SECRET + '\n'
+		fs.writeFileSync(process.env['HOME'] + '/.aws/credentials',content)
+		break;
+	case 'azure':
+		content = '{"subscriptionId":"' + SUBS_ID + '",' +
+					'"clientId":"' + APP_ID + '",' +
+					'"clientSecret":"' + APP_SECRET + '",' +
+					'"tenantId":"' + TENANT_ID + '"}'
+		fs.writeFileSync(process.env['HOME'] + '/.azure/osServicePrincipal.json',content)
+		break;
+	default:
+		break;
+	}
+	
+
 }
 	
 app.listen(5555);
 console.log("server starting on port: " + 5555);
-

@@ -19,8 +19,8 @@ echo "Resource Group found"
 echo "Tagging OpenShift Cluster Resource Group"
 delete_date=$(date +%Y-%m-%d -d "$DATE + 7 day")
 new_tags=$(az group show -n $resource_group_name | jq '.tags + {
-"Owner": "thuy.n.nguyen@ibm.com",
-"Team": "ICPMCM",
+"Owner": "thnguyen@redhat.com",
+"Team": "RHACM",
 "Usage": "Temp",
 "Usage_desc": "OCP cluster for SERT",
 "Delete_date": "'$delete_date'"

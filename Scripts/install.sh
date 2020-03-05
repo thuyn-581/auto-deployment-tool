@@ -25,18 +25,23 @@ echo >&2 '
 '
 
 cd $HOME/auto-deployment-tool
+LNK=https://mirror.openshift.com/pub/openshift-v4/clients/
 if [ ! -d ./install-client/$ocp_version ]; then
 	mkdir -p ./install-client/$ocp_version
 	# download install client	
 	cd ./install-client/$ocp_version
-	curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/$ocp_version/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+	if [[ $ocp_version == *"nightly"* ]]; then	
+		curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/$ocp_version/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+	else
+		curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/$ocp_version/openshift-install-linux-$ocp_version.tar.gz --output openshift-install-$ocp_version.tar.gz
+	fi
 	# extract the file
 	tar xvf openshift-install-$ocp_version.tar.gz
 fi
 
 # adding ssh key
 eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_rsa
+ssh-add $HOME/.ssh/id_rsa
 
 # uninstall existing ocp if any
 cd $HOME/auto-deployment-tool/install-client/$ocp_version
@@ -47,14 +52,14 @@ if [ -d $ocp_installation_dir ]; then
 fi
 
 # export publick key
-export ocp_pull_secret=`cat /root/auto-deployment-tool/pull-secret.txt`
-export public_key=`cat ~/.ssh/id_rsa.pub`
+export ocp_pull_secret=`cat ${HOME}/auto-deployment-tool/pull-secret.txt`
+export public_key=`cat ${HOME}/.ssh/id_rsa.pub`
 
 # create installation directory
 mkdir -p $ocp_installation_dir
 
 # populate config file
-envsubst < /root/auto-deployment-tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
+envsubst < $HOME/auto-deployment-tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
 
 # deploy
 printf "\nDEPLOY OCP CLUSTER - $cluster_name \n"	
@@ -66,7 +71,7 @@ export KUBECONFIG=$ocp_installation_dir/auth/kubeconfig
 # add user admin
 printf "\nADD ocpadmin USER\n"
 oc create user ocpadmin
-kubectl create clusterrolebinding permissive-binding --clusterrole=cluster-admin --user=ocpadmin --group=system:serviceaccounts
+oc create clusterrolebinding permissive-binding --clusterrole=cluster-admin --user=ocpadmin --group=system:serviceaccounts
 htpasswd -c -B -b $ocp_installation_dir/users.htpasswd ocpadmin Test4ACM
 oc create secret generic htpass-secret --from-file=htpasswd=$ocp_installation_dir/users.htpasswd -n openshift-config
 oc apply -f $HOME/auto-deployment-tool/Templates/htpasswd-cr.yaml
