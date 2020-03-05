@@ -25,7 +25,6 @@ echo >&2 '
 '
 
 cd $HOME/auto-deployment-tool
-LNK=https://mirror.openshift.com/pub/openshift-v4/clients/
 if [ ! -d ./install-client/$ocp_version ]; then
 	mkdir -p ./install-client/$ocp_version
 	# download install client	

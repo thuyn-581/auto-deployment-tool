@@ -16,76 +16,49 @@ The server has been deployed on 9.21.51.225 - Please sign in BSO before sending 
 
 # Usages:
 The following deployment scenarios are currently supported by the tool:
-1. Deploy cloud paks on OpenShift on Fyre (CP4MCM and Common Services) 
-	- Manifest: online/offline
-	- Stage: edge/stash/release
-2. Deploy stand-alone ICP cluster in Spectrum lab (9.21.51.x) 
-	- Manifest: offline
-	- Stage: release
+1. Deploy OpenShift on 
+	- AWS 
+	- Azure
 	
 `curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://9.21.51.225:5555/run`
 
 
 # Sample post messages:
-1. CP4MCM online
-```json
 {
-  "arch": "x86_64",
-  "shellPwd":"<shell_pwd>",
-  "cloudpak": "mcm",
-  "version":"3.2.3",
-  "manifest": "online",
-  "url":"hyc-cloud-private-edge-docker-local/ibmcom-amd64/mcm-inception",
-  "cluster": {
-    	"name":"<cluster_name>",
-    	"scName":"rook-ceph-cephfs-internal",
-	"infNode": "<cluster_name>.fyre.ibm.com",
-	"masterNode": "worker0.<cluster_name>.os.fyre.ibm.com",
-    	"proxyNode": "worker1.<cluster_name>.os.fyre.ibm.com",
-    	"managementNode": "worker2.<cluster_name>.os.fyre.ibm.com"
+	"provider": {
+		"name": "aws",
+		"keyId":"xxx",
+		"keySecret":"xxx"
+	},
+	"ocpVersion": "4.4.0-0.nightly-2020-03-03-065638",
+	"baseDnsDomain": "dev01.red-chesterfield.com",
+	"region": "us-east-1",
+	"clusterName": "thnguyen-ocp44",
+    "acmEnabled": "false",
+	"acmHub": {
+		"csVersion": "3.3.0",
+		"scName": "gp2"
 	}
 }
-```
 
-2. Common Services offline
-```json
 {
-  "arch": "x86_64",
-  "shellPwd":"<shell_pwd>",
-  "cloudpak": "cs",
-  "version":"3.2.3",
-  "manifest": "offline",
-  "url":"hyc-cloud-private-release-generic-local/offline/CS-boeblingen",
-  "cluster": {
-    	"name":"<cluster_name>",
-    	"scName":"rook-ceph-cephfs-internal",
-	"infNode": "<cluster_name>-inf.fyre.ibm.com",
-	"masterNode": "worker0.<cluster_name>.os.fyre.ibm.com",
-    	"proxyNode": "worker1.<cluster_name>.os.fyre.ibm.com",
-    	"managementNode": "worker2.<cluster_name>.os.fyre.ibm.com"
+	"provider": {
+		"name": "azure",
+		"subscriptionId": "da057d84-6570-41ea-83f7-f0f61a70542f",
+		"tenantId": "6047c7e9-b2ad-488d-a54e-dc3f6be6a7ee",
+		"appId":"xxx",
+		"appSecret":"xxx"
+	},
+	"ocpVersion": "4.3.3",
+	"baseDnsDomain": "dev06.az.red-chesterfield.com",
+	"region": "eastus2",
+	"clusterName": "thnguyen-ocp44-az",
+    "acmEnabled": "false",
+	"acmHub": {
+		"csVersion": "3.2.4",
+		"scName": "managed-premium"
 	}
 }
-```
-
-3. Stand-alone ICP
-```json
-{
-  "arch": "x86_64",
-  "shellPwd":"<shell_pwd>",
-  "cloudpak": "icp",
-  "version":"3.2.1",
-  "manifest": "offline",
-  "url":"hyc-cloud-private-release-generic-local/offline/3.2.1",
-  "cluster": {
-    	"name":"<cluster_name>",
-	"infNode": "9.21.51.x",
-	"masterNode": "9.21.51.x",
-	"workerNode": "9.21.51.x",
-    	"proxyNode": "9.21.51.x",
-    	"managementNode": "9.21.51.x"
-	}
-}
-```
 
 # Slack channel 
-https://ibm-cloudplatform.slack.com/archives/CRGTKJC73
+https://coreos.slack.com/archives/GUXNTT64Q
