@@ -8,10 +8,10 @@ The tool is built using Node.js and written in JavaScript to kick start the depl
 
 
 # Endpoints:
-The server has been deployed on AWS (public ip 3.21.27.95 - subject to changes) 
-- http://3.21.27.95:5555/status - server GET request for /status endpoint to show state of this app by returning task queues (Queued, In Progress, Completed)
-- http://3.21.27.95:5555/run - server POST request to /run end-point to initiate auto deployment on the target cluster
-- http://3.21.27.95:5555/task/<runId> - server GET request for /task end-point.  Allows initiator to know when their task completes
+The server has been deployed on vSphere (public ip 147.75.104.202 - subject to changes) 
+- https://147.75.104.202:5555/status - server GET request for /status endpoint to show state of this app by returning task queues (Queued, In Progress, Completed)
+- https://147.75.104.202:5555/run - server POST request to /run end-point to initiate auto deployment on the target cluster
+- https://147.75.104.202:5555/task/<runId> - server GET request for /task end-point.  Allows initiator to know when their task completes
 
 
 # Usages:
@@ -20,7 +20,7 @@ The following deployment scenarios are currently supported by the tool:
 	- on AWS
 	- on Azure
 	
-`curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> http://3.21.27.95:5555/run`
+`curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> https://147.75.104.202:5555/run`
 
 
 # Sample post messages:
@@ -67,4 +67,4 @@ The following deployment scenarios are currently supported by the tool:
 ```
 
 # Slack channel 
-https://ibm-cloudplatform.slack.com/archives/CRGTKJC73
+https://coreos.slack.com/archives/GUXNTT64Q

@@ -1,13 +1,14 @@
 var express = require('express');
 var bodyParser = require("body-parser");
 var fs = require('fs');
+var https = require('https');
 var { spawn }= require('child_process');
 var superagent = require('superagent');
 var PropertiesReader = require('properties-reader');
 var properties = PropertiesReader(process.env['HOME'] + '/auto-deployment-tool/secret.properties');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
-var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
+var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
 var SYNERGY_USER = properties.get('synergy.quay.io.user');
 var SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
@@ -212,7 +213,7 @@ function taskCompleted(task,exitCode){
 			}
 			else{
 				exitStatus = 'Access the OpenShift web-console: https://console-openshift-console.apps.'+ task.CLUSTER_NAME + '.' + task.BASE_DNS_DOMAIN
-							+ '\nLogin to the console with user: ocpadmin, password: Test4ACM';
+							+ '\nLogin to the console with user: ocp/ocpadmin, password: Test4ACM';
 			}
 		}
 		else {
@@ -291,6 +292,12 @@ function generateCredentialFiles(provider){
 	
 
 }
-	
-app.listen(5555);
+
+var httpsServer = https.createServer({
+  key: fs.readFileSync(process.env['HOME'] + '/auto-deployment-tool/server.key','utf8'),
+  cert: fs.readFileSync(process.env['HOME'] + '/auto-deployment-tool/server.cert','utf8')
+}, app);
+
+httpsServer.listen(5555);
+//app.listen(5555);
 console.log("server starting on port: " + 5555);
