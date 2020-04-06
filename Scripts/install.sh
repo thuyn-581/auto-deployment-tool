@@ -44,11 +44,13 @@ ssh-add $HOME/.ssh/id_rsa
 
 # uninstall existing ocp if any
 cd $HOME/auto-deployment-tool/install-client/$ocp_version
-if [ -d $ocp_installation_dir ]; then
+#if [ -d $ocp_installation_dir ]; then
+if [ -s $ocp_installation_dir/metadata.json ]; then
 	printf "\nDESTROY EXISTING CLUSTER - $cluster_name \n"		
 	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
-	rm -rf $ocp_installation_dir
+	#rm -rf $ocp_installation_dir
 fi
+rm -rf $ocp_installation_dir
 
 # export publick key
 export ocp_pull_secret=`cat ${HOME}/auto-deployment-tool/pull-secret.txt`
@@ -77,26 +79,20 @@ oc apply -f $HOME/auto-deployment-tool/Templates/htpasswd-cr.yaml
 
 # azure tagging
 if [[ $provider = "azure" ]]; then
-	sh $HOME/auto-deployment-tool/Scripts/azure-tagging.sh
+	#sh $HOME/auto-deployment-tool/Scripts/azure-tagging.sh
 fi
 
 # install mcm manifest
 if [[ $acm_enabled = "true" ]]; then
-	printf "\nINSTALL ACM MANIFEST - VERSION $COMMON_SERVICE_VERSION \n"	
-
-	# get worker nodes
-	export nodes=($(kubectl get nodes | awk '{if($3 == "worker") print $1;}'))
-	export DEFAULT_DEDICATED_NODES="${nodes[0]} ${nodes[1]} ${nodes[2]}"
-	echo $nodes
-	echo $DEFAULT_DEDICATED_NODES
+	printf "\nINSTALL ACM - VERSION $COMMON_SERVICE_VERSION \n"	
 	
 	# clone manifest repo
 	mkdir $acm_installation_dir
 	cd $acm_installation_dir
-	git clone git@github.com:rh-ibm-synergy/cp4mcm-manifest.git
-	cd cp4mcm-manifest
-	make use-synergy
-
+	git clone git@github.com:open-cluster-management/deploy.git
+	cd deploy
+	sed -i "s/^1.0.0[^ ]*/$acm_version/" snapshot.ver
+	
 	# start deploy
 	sh start.sh
 fi

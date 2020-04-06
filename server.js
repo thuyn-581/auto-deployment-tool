@@ -4,15 +4,15 @@ var fs = require('fs');
 var https = require('https');
 var { spawn }= require('child_process');
 var superagent = require('superagent');
-var PropertiesReader = require('properties-reader');
-var properties = PropertiesReader(process.env['HOME'] + '/auto-deployment-tool/secret.properties');
+//var PropertiesReader = require('properties-reader');
+//var properties = PropertiesReader(process.env['HOME'] + '/auto-deployment-tool/secret.properties');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
-var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
+var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
-var SYNERGY_USER = properties.get('synergy.quay.io.user');
-var SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
-var SYNERGY_CHART_PASSWD = properties.get('synergy.chart.password');
+//var SYNERGY_USER = properties.get('synergy.quay.io.user');
+//var SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
+//var SYNERGY_CHART_PASSWD = properties.get('synergy.chart.password');
 
 var currentTasks = []; // currently executing tasks
 var taskQueue = [];  // queue of tasks to be executed
@@ -23,12 +23,17 @@ exitCodeMapping[0] = 'COMPLETED';
 
 var home_dir = process.env['HOME'] + '/auto-deployment-tool';
 var PROVIDER,
+	KEY_ID,
+	KEY_SECRET,
+	APP_ID,
+	APP_SECRET,
+	SUBS_ID,
+	TENANT_ID,
     REGION,
     BASE_DNS_DOMAIN,
     CLUSTER_NAME,
     OCP_VERSION,
-    CS_VERSION = 'n/a',
-    SC_NAME,
+    ACM_VERSION = 'n/a',
     ACM_ENABLED;
 var OCP_DIR = process.env['HOME'] + '/ocp-install/';
 
@@ -90,18 +95,16 @@ function queueTask(req, res) {
 	
 	PROVIDER = req.body.provider.name;
 	switch(PROVIDER) {
-		case 'aws':
-			KEY_ID = req.body.provider.keyId;
-			KEY_SECRET = req.body.provider.keySecret;
-			break;
-		case 'azure':
-			APP_ID = req.body.provider.appId;
-			APP_SECRET = req.body.provider.appSecret;
-			SUBS_ID = req.body.provider.subscriptionId;
-			TENANT_ID = req.body.provider.tenantId;
-			break;
-		default:
-			break;
+    case 'aws':
+        KEY_ID = req.body.provider.keyId;
+        KEY_SECRET = req.body.provider.keySecret;
+    break;
+    case 'azure':
+        APP_ID = req.body.provider.appId;
+        APP_SECRET = req.body.provider.appSecret;
+        SUBS_ID = req.body.provider.subscriptionId;
+        TENANT_ID = req.body.provider.tenantId;
+    break;
 	}
 
     REGION = req.body.region;
@@ -111,8 +114,7 @@ function queueTask(req, res) {
     ACM_ENABLED = req.body.acmEnabled;
 	
     if (ACM_ENABLED === 'true'){	
-		CS_VERSION = req.body.acmHub.csVersion;
-		SC_NAME = req.body.acmHub.scName;
+		ACM_VERSION = req.body.acmVersion;
     }	
 
     var task = {
@@ -122,7 +124,7 @@ function queueTask(req, res) {
 		REGION,
 		BASE_DNS_DOMAIN,
 		ACM_ENABLED,
-		CS_VERSION,
+		ACM_VERSION,
 		runId: runId,
 		exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
     };
@@ -143,11 +145,8 @@ function processQueue() {
 }	
 
 function taskExecute(currentTask){
-	//let dir = '/root/auto-deployment-tool';
 	let cmd ='';
-	
-	//generateCredentialFiles
-	generateCredentialFiles(PROVIDER);
+	var env = Object.create( process.env );
 	
 	// create logs folfer if not exists
 	if (!fs.existsSync(home_dir +'/logs')){
@@ -155,9 +154,22 @@ function taskExecute(currentTask){
 		require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 	}	
 	let logfile = fs.createWriteStream(home_dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
-						
+	
+	//set provider variables
+	switch(PROVIDER) {
+	case 'aws':
+		env.AWS_ACCESS_KEY_ID = KEY_ID;
+		env.AWS_SECRET_ACCESS_KEY = KEY_SECRET;
+	break;
+	case 'azure':
+		env.azure_subscription_id = SUBS_ID;
+		env.azure_tenant_id = TENANT_ID;
+		env.azure_client_id = APP_ID
+		env.azure_client_secret = APP_SECRET;
+	break;
+	}
+	
 	// set ocp variables
-	var env = Object.create( process.env );
 	env.ocp_version = OCP_VERSION;
 	env.cluster_name = CLUSTER_NAME;
 	env.base_dns_domain = BASE_DNS_DOMAIN;
@@ -166,28 +178,15 @@ function taskExecute(currentTask){
 	env.ocp_installation_dir = OCP_DIR + CLUSTER_NAME;
 	env.acm_enabled = ACM_ENABLED
 	
-	// set azure ids
-	if (PROVIDER === 'azure'){
-		env.azure_client_id = APP_ID;
-		env.azure_client_secret = APP_SECRET;
-		env.azure_tenant_id = TENANT_ID;
-	}
-	
 	// set acm varriables
 	if (ACM_ENABLED === 'true'){
-		env.COMMON_SERVICE_VERSION=CS_VERSION;
-		env.acm_installation_dir=OCP_DIR + CLUSTER_NAME + '/acm-'+ CS_VERSION +'-' + PROVIDER;
+		env.acm_version=ACM_VERSION;
+		env.acm_installation_dir=OCP_DIR + CLUSTER_NAME + '/acm-'+ ACM_VERSION +'-' + PROVIDER;
 		env.DEFAULT_STORAGE_CLASS=SC_NAME;
-		env.DEFAULT_ADMIN_USERNAME='admin';
-		env.DEFAULT_ADMIN_PASSWORD='admin';
-		env.PASSWORD_RULES='(.*)';
-		env.DOCKER_USERNAME=SYNERGY_USER;
-		env.DOCKER_PASSWORD=SYNERGY_PASSWD;
-		env.CHART_PASSWORD=SYNERGY_CHART_PASSWD;
 		env.LICENSE='accept';
 	}	
 	
-	//console.log(env)
+	//console.log(process.env)
 	var child = spawn('sh',[home_dir + '/Scripts/install.sh'],{ env:env, shell:true, stdio:'pipe' });
 	child.stdout.on('data', (data) => {
 		//process.stdout.write(`${data}`)  // log to console
@@ -202,7 +201,7 @@ function taskExecute(currentTask){
 function taskCompleted(task,exitCode){
 	let exitStatus = task.exitStatus;
 	if ( exitStatus !== 'Cancelled'){
-	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ')';	
+	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ') - Please check out .openshit_install.log for more info';	
 		const execSync = require('child_process').execSync;
 		const cmd = 'tac '+ home_dir +'/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
 	
@@ -243,7 +242,7 @@ function taskCompleted(task,exitCode){
 function sendSlackMessage(task) {
 	var message = '';
 	if (task.ACM_ENABLED === 'true'){
-	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- Installed MCM *'+ ' v'+ task.CS_VERSION +'*\n```' +task.exitStatus + '```';
+	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- Installed MCM *'+ ' v'+ task.ACM_VERSION +'*\n```' +task.exitStatus + '```';
 	}
 	else {
 	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- OpenShift version *'+ ' v'+ task.OCP_VERSION +'*\n```' +task.exitStatus + '```';
@@ -264,35 +263,7 @@ function sendSlackMessage(task) {
             }
         });
 }
-
-function generateCredentialFiles(provider){ 
-	let content = '';
-	// create credential folfer if not exists
-	if (!fs.existsSync(process.env['HOME'] +'/.' + provider)){
-		cmd = 'mkdir -p '+ process.env['HOME'] + '/.' + provider;
-		require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
-	}
-	switch(provider) {
-	case 'aws':
-		content = '[default]\n'+
-					'aws_access_key_id=' + KEY_ID + '\n' +
-					'aws_secret_access_key=' + KEY_SECRET + '\n'
-		fs.writeFileSync(process.env['HOME'] + '/.aws/credentials',content)
-		break;
-	case 'azure':
-		content = '{"subscriptionId":"' + SUBS_ID + '",' +
-					'"clientId":"' + APP_ID + '",' +
-					'"clientSecret":"' + APP_SECRET + '",' +
-					'"tenantId":"' + TENANT_ID + '"}'
-		fs.writeFileSync(process.env['HOME'] + '/.azure/osServicePrincipal.json',content)
-		break;
-	default:
-		break;
-	}
-	
-
-}
-
+		
 var httpsServer = https.createServer({
   key: fs.readFileSync(process.env['HOME'] + '/auto-deployment-tool/server.key','utf8'),
   cert: fs.readFileSync(process.env['HOME'] + '/auto-deployment-tool/server.cert','utf8')
