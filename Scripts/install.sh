@@ -39,63 +39,109 @@ if [ ! -d ./install-client/$ocp_version ]; then
 fi
 
 # adding ssh key
-eval "$(ssh-agent -s)"
-ssh-add $HOME/.ssh/id_rsa
+if ! ps -C ssh-agent > /dev/null
+then 
+	eval "$(ssh-agent -s)"
+	ssh-add $HOME/.ssh/id_rsa
+fi
+
+# get gcp service account key
+rm -f $HOME/auto-deployment-tool/.sa.json 
+if [[ $provider = "gcp" ]]; then
+	account=$sa_name@$PROJECTID.iam.gserviceaccount.com
+	list=`gcloud iam service-accounts keys list --iam-account ${account} | sort -k3n | awk '{ if(NR>1) print $1 }'`
+	count=`wc -w <<< "$list"`
+	if [ $count -gt 5 ]; then	
+		list=`gcloud iam service-accounts keys list --iam-account ${account} | sort -k3n | awk '{ if(NR>6) print $1 }'`
+		for i in $list; do
+			gcloud iam service-accounts keys delete $i --iam-account $account --quiet
+		done
+	fi
+	gcloud iam service-accounts keys create $HOME/auto-deployment-tool/.sa.json --iam-account $account
+	sleep 1
+fi
+export GOOGLE_CLOUD_KEYFILE_JSON=$HOME/auto-deployment-tool/.sa.json
 
 # uninstall existing ocp if any
 cd $HOME/auto-deployment-tool/install-client/$ocp_version
-#if [ -d $ocp_installation_dir ]; then
 if [ -s $ocp_installation_dir/metadata.json ]; then
 	printf "\nDESTROY EXISTING CLUSTER - $cluster_name \n"		
 	./openshift-install destroy cluster --dir=$ocp_installation_dir --log-level=info
-	#rm -rf $ocp_installation_dir
 fi
 rm -rf $ocp_installation_dir
 
-# export publick key
-export ocp_pull_secret=`cat ${HOME}/auto-deployment-tool/pull-secret.txt`
-export public_key=`cat ${HOME}/.ssh/id_rsa.pub`
+if [[ $destroy = "false" ]]; 
+then
+	# export publick key
+	export ocp_pull_secret=`cat ${HOME}/auto-deployment-tool/pull-secret.txt`
+	export public_key=`cat ${HOME}/.ssh/id_rsa.pub`
 
-# create installation directory
-mkdir -p $ocp_installation_dir
+	# create installation directory
+	mkdir -p $ocp_installation_dir
 
-# populate config file
-envsubst < $HOME/auto-deployment-tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
+	# populate config file
+	envsubst < $HOME/auto-deployment-tool/Templates/install-config-$provider.yaml.template > $ocp_installation_dir/install-config.yaml
 
-# deploy
-printf "\nDEPLOY OCP CLUSTER - $cluster_name \n"	
-./openshift-install create cluster --dir=$ocp_installation_dir --log-level=info
+	# deploy
+	printf "\nDEPLOY OCP CLUSTER - $cluster_name \n"	
+	./openshift-install create cluster --dir=$ocp_installation_dir --log-level=info
 
-# export config
-export KUBECONFIG=$ocp_installation_dir/auth/kubeconfig
+	# export config
+	export KUBECONFIG=$ocp_installation_dir/auth/kubeconfig
+	
+	# add user admin
+	printf "\nADD ocpadmin USER\n"
+	oc create user ocpadmin
+	oc create clusterrolebinding permissive-binding --clusterrole=cluster-admin --user=ocpadmin --group=system:serviceaccounts
+	htpasswd -c -B -b $ocp_installation_dir/users.htpasswd ocpadmin Test4ACM
+	oc create secret generic htpass-secret --from-file=htpasswd=$ocp_installation_dir/users.htpasswd -n openshift-config
+	oc apply -f $HOME/auto-deployment-tool/Templates/htpasswd-cr.yaml
 
-# add user admin
-printf "\nADD ocpadmin USER\n"
-oc create user ocpadmin
-oc create clusterrolebinding permissive-binding --clusterrole=cluster-admin --user=ocpadmin --group=system:serviceaccounts
-htpasswd -c -B -b $ocp_installation_dir/users.htpasswd ocpadmin Test4ACM
-oc create secret generic htpass-secret --from-file=htpasswd=$ocp_installation_dir/users.htpasswd -n openshift-config
-oc apply -f $HOME/auto-deployment-tool/Templates/htpasswd-cr.yaml
+	# azure tagging
+	if [[ $provider = "azure" ]]; then
+		sh $HOME/auto-deployment-tool/Scripts/azure-tagging.sh
+	fi
+	
+	#wait for ocp pods up and runnning
+	sleep 30
+	until [ `oc get pods --all-namespaces --no-headers | grep -v Running | grep -v Completed | wc -l` -eq 0 ]; do
+		sleep 10
+	done
 
-# azure tagging
-if [[ $provider = "azure" ]]; then
-	#sh $HOME/auto-deployment-tool/Scripts/azure-tagging.sh
+	# install acm
+	if [[ $acm_enabled = "true" ]]; then
+		printf "\nINSTALL ACM - VERSION $acm_version \n"			
+		# clone deploy repo
+		cd $ocp_installation_dir
+		git clone git@github.com:open-cluster-management/deploy.git
+		cd deploy
+		cp $HOME/auto-deployment-tool/pull-secret.yaml ./prereqs
+		sed -i "s/^1.0.0[^ ]*/$acm_version/" snapshot.ver
+		
+		# override image repo
+		if [[ ! $acm_repo = "upstream" ]]; do
+			sed -i "s/quay.io\/open-cluster-management/$acm_repo/g" ./acm-operator/kustomization.yaml
+			echo -e "  overrides:\n    imageRepository: \"${acm_repo}\""  | tee -a ./multiclusterhub/example-multiclusterhub-cr.yaml
+		fi
+		
+		# start deploy
+		sh start.sh --silent
+		
+		# wait for deploy complete
+		wait_time=0
+		wait_duration=300		
+		until [ `oc get pods -n open-cluster-management --no-headers | grep Running | wc -l` -eq 36 ]; do
+			sleep 10
+			((wait_time=wait_time+10))
+			echo "Waited $wait_time/$wait_duration seconds for all pods"
+			if [[ $wait_time -gt $wait_duration ]]; then
+				echo "Waited $wait_duration seconds for 36 pods but it never came up!  Exiting with a failure."
+				exit 1
+			fi
+		done
+	fi
 fi
 
-# install mcm manifest
-if [[ $acm_enabled = "true" ]]; then
-	printf "\nINSTALL ACM - VERSION $COMMON_SERVICE_VERSION \n"	
-	
-	# clone manifest repo
-	mkdir $acm_installation_dir
-	cd $acm_installation_dir
-	git clone git@github.com:open-cluster-management/deploy.git
-	cd deploy
-	sed -i "s/^1.0.0[^ ]*/$acm_version/" snapshot.ver
-	
-	# start deploy
-	sh start.sh
-fi
 
 #---------------------------------
 trap : 0

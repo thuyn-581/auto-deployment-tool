@@ -1,4 +1,5 @@
-var express = require('express');
+const express = require('express');
+const ecstatic = require('ecstatic');
 var bodyParser = require("body-parser");
 var fs = require('fs');
 var https = require('https');
@@ -8,11 +9,7 @@ var superagent = require('superagent');
 //var properties = PropertiesReader(process.env['HOME'] + '/auto-deployment-tool/secret.properties');
 
 // Change slack incoming webhook url to the URL provided by your slack admin
-var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
-
-//var SYNERGY_USER = properties.get('synergy.quay.io.user');
-//var SYNERGY_PASSWD = properties.get('synergy.quay.io.password');
-//var SYNERGY_CHART_PASSWD = properties.get('synergy.chart.password');
+var SLACK_WEBHOOK = 'https://hooks.slack.com/services/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';
 
 var currentTasks = []; // currently executing tasks
 var taskQueue = [];  // queue of tasks to be executed
@@ -29,11 +26,17 @@ var PROVIDER,
 	APP_SECRET,
 	SUBS_ID,
 	TENANT_ID,
+	PROJECT_ID,
+	SA_NAME,
+	TAG_OWNER,
+	TAG_TEAM,
+	DESTROY,
     REGION,
     BASE_DNS_DOMAIN,
     CLUSTER_NAME,
     OCP_VERSION,
     ACM_VERSION = 'n/a',
+	ACM_REPO = 'upstream',
     ACM_ENABLED;
 var OCP_DIR = process.env['HOME'] + '/ocp-install/';
 
@@ -42,6 +45,11 @@ app.use(bodyParser.json());
 app.get('/status', getStatus);  // server GET request for /status end-point to show state of this launcher app.
 app.post('/run', queueTask); // server POST request to /run end-point.  Allows someone (or something) to initiate execution.
 app.get('/task', getTask); // server GET request for /task end-point.  Allows initiator to know when their task completes.
+
+app.use(ecstatic({
+  root: `/root/auto-deployment-tool/logs`,
+  showdir: true,
+}));
 
 setInterval(processQueue, 3000); // start main interval that checks queue for task to run.
 
@@ -92,6 +100,7 @@ function getTask(req, res) {
 // queues a task to run a test.  return json object containing runId that can be used for initiator get task status.
 function queueTask(req, res) {
     var runId = 'run_id_' + new Date().getTime(); // generate a random runId.	
+	var task;
 	
 	PROVIDER = req.body.provider.name;
 	switch(PROVIDER) {
@@ -105,7 +114,14 @@ function queueTask(req, res) {
         SUBS_ID = req.body.provider.subscriptionId;
         TENANT_ID = req.body.provider.tenantId;
     break;
+	case 'gcp':
+		SA_NAME = req.body.provider.saName;
+		PROJECT_ID = req.body.provider.projectId;
+	break;
 	}
+	
+	TAG_OWNER = req.body.provider.tags.owner;
+	TAG_TEAM = req.body.provider.tags.team;
 
     REGION = req.body.region;
     OCP_VERSION = req.body.ocpVersion;
@@ -114,20 +130,35 @@ function queueTask(req, res) {
     ACM_ENABLED = req.body.acmEnabled;
 	
     if (ACM_ENABLED === 'true'){	
-		ACM_VERSION = req.body.acmVersion;
+		ACM_VERSION = req.body.acmHub.acmVersion;
+		REPO = req.body.acmHub.acmRepo;
     }	
-
-    var task = {
-		PROVIDER,
-		CLUSTER_NAME,
-		OCP_VERSION,
-		REGION,
-		BASE_DNS_DOMAIN,
-		ACM_ENABLED,
-		ACM_VERSION,
-		runId: runId,
-		exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
-    };
+	
+	DESTROY = req.body.destroy;
+	
+	if (DESTROY === 'true') {
+		task = {
+			PROVIDER,
+			CLUSTER_NAME,
+			BASE_DNS_DOMAIN,
+			DESTROY,
+			runId: runId,
+			exitStatus: 'Destroying'
+		};
+	}
+    else{
+		task = {
+			PROVIDER,
+			CLUSTER_NAME,
+			OCP_VERSION,
+			REGION,
+			BASE_DNS_DOMAIN,
+			ACM_ENABLED,
+			ACM_VERSION,
+			runId: runId,
+			exitStatus: 'Pending' // Initiator can use /task to check exitStatus.  When no longer pending the run is complete.
+		};
+	}
     taskQueue.push(task);
     res.json(task).end();
 }
@@ -146,6 +177,7 @@ function processQueue() {
 
 function taskExecute(currentTask){
 	let cmd ='';
+	var child;
 	var env = Object.create( process.env );
 	
 	// create logs folfer if not exists
@@ -153,7 +185,7 @@ function taskExecute(currentTask){
 		cmd = 'mkdir -p '+ home_dir +'/logs';
 		require('child_process').execSync(cmd,{stdio:['inherit','pipe','pipe']});
 	}	
-	let logfile = fs.createWriteStream(home_dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log')
+	let logfile = home_dir +'/logs/'+ currentTask.CLUSTER_NAME +'-'+ currentTask.runId +'.log';
 	
 	//set provider variables
 	switch(PROVIDER) {
@@ -162,14 +194,20 @@ function taskExecute(currentTask){
 		env.AWS_SECRET_ACCESS_KEY = KEY_SECRET;
 	break;
 	case 'azure':
-		env.azure_subscription_id = SUBS_ID;
-		env.azure_tenant_id = TENANT_ID;
-		env.azure_client_id = APP_ID
-		env.azure_client_secret = APP_SECRET;
+		env.SUBSCRIPTION_ID = SUBS_ID;
+		env.TENANT_ID = TENANT_ID;
+		env.APP_ID = APP_ID
+		env.SECRET = APP_SECRET;
+	break;
+	case 'gcp':
+		env.sa_name = SA_NAME;
+		env.GOOGLE_CLOUD_KEYFILE_JSON = home_dir + '/.sa.json';
+		env.PROJECTID = PROJECT_ID;
 	break;
 	}
 	
 	// set ocp variables
+	env.destroy = DESTROY;
 	env.ocp_version = OCP_VERSION;
 	env.cluster_name = CLUSTER_NAME;
 	env.base_dns_domain = BASE_DNS_DOMAIN;
@@ -180,51 +218,45 @@ function taskExecute(currentTask){
 	
 	// set acm varriables
 	if (ACM_ENABLED === 'true'){
-		env.acm_version=ACM_VERSION;
-		env.acm_installation_dir=OCP_DIR + CLUSTER_NAME + '/acm-'+ ACM_VERSION +'-' + PROVIDER;
-		env.DEFAULT_STORAGE_CLASS=SC_NAME;
-		env.LICENSE='accept';
+		env.acm_version = ACM_VERSION;
+		env.acm_installation_dir = OCP_DIR + CLUSTER_NAME + '/acm-'+ ACM_VERSION +'-' + PROVIDER;
+		env.acm_repo = ACM_REPO;
+		env.LICENSE = 'accept';
 	}	
 	
-	//console.log(process.env)
-	var child = spawn('sh',[home_dir + '/Scripts/install.sh'],{ env:env, shell:true, stdio:'pipe' });
-	child.stdout.on('data', (data) => {
-		//process.stdout.write(`${data}`)  // log to console
-		logfile.write(data)  // log to file
-	})	
+	//console.log(env)
+	child = spawn('sh',[home_dir + '/Scripts/install.sh', ' 2>&1 | tee '+ logfile + '; ( exit ${PIPESTATUS[0]} )'],{ env:env, shell:true, stdio:'inherit' });
 	child.on('close', function (exitCode) { // Execution Tool exited, so do post-processing (i.e. post result to slack).
-	        taskCompleted(currentTask, exitCode);
-	        currentTask = null;
-        });	
+        taskCompleted(currentTask, exitCode);
+        currentTask = null;
+    });	
+//	taskCompleted(currentTask,child.status);
+//	currentTask = null;
 }
 
 function taskCompleted(task,exitCode){
-	let exitStatus = task.exitStatus;
-	if ( exitStatus !== 'Cancelled'){
-	    exitStatus = 'ERROR: Unknown Exit Status (' + exitCode + ') - Please check out .openshit_install.log for more info';	
-		const execSync = require('child_process').execSync;
-		const cmd = 'tac '+ home_dir +'/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
+	var logfile = home_dir +'/logs/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log';
+	const execSync = require('child_process').execSync;
+	//const cmd = 'tac '+ logfile;
+	var exitStatus = '\n>:warning: ERROR: An error occurred. Exiting...Please check <https://147.75.104.202:5555/'+ task.CLUSTER_NAME +'-'+ task.runId +'.log' + '|_detailed logs_> for more info';
 	
-		if (exitCodeMapping[exitCode]) {        
-			if (ACM_ENABLED === 'true'){
-				const stdout = execSync(cmd +' | grep "Connect to MCM at" | head -1');
-				exitStatus = exitCodeMapping[exitCode]+': '+ `${stdout}`;
-			}
-			else{
-				exitStatus = 'Access the OpenShift web-console: https://console-openshift-console.apps.'+ task.CLUSTER_NAME + '.' + task.BASE_DNS_DOMAIN
-							+ '\nLogin to the console with user: ocp/ocpadmin, password: Test4ACM';
-			}
+	if (exitCodeMapping[exitCode]) {   
+		if (task.DESTROY === 'true'){
+			exitStatus = '\n>:checkyes: Destroy completed';
 		}
 		else {
-			const stdout = execSync(cmd +' | grep TASK | head -1');
-			if (`${stdout}`.length > 0){
-				exitStatus = 'FAILED: ' + `${stdout}`;
+			if (task.ACM_ENABLED === 'true'){
+				exitStatus = ':checkyes: \n>Red Hat ACM URL: https://multicloud-console.apps.' + task.CLUSTER_NAME + '.' + task.BASE_DNS_DOMAIN + '\n>Login to the console with user: ocp/ocpadmin, password: Test4ACM';
 			}
-		};
-		
-		// remove ANSI escape codes
-		task.exitStatus = exitStatus.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+			else{
+				exitStatus = ':checkyes: \n>OpenShift web-console: https://console-openshift-console.apps.'+ task.CLUSTER_NAME + '.' + task.BASE_DNS_DOMAIN + '\n>Login to the console with user: ocp/ocpadmin, password: Test4ACM';
+			}
+		}
+		execSync('rm -f ' + logfile); //remove log file if successfull	
 	}
+		
+	// remove ANSI escape codes
+	task.exitStatus = exitStatus.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 	
     console.log('Task completed on '+ task.CLUSTER_NAME +'.  runId: ' + task.runId + ' exitStatus: ' + exitStatus);    
     sendSlackMessage(task);
@@ -241,12 +273,18 @@ function taskCompleted(task,exitCode){
 
 function sendSlackMessage(task) {
 	var message = '';
-	if (task.ACM_ENABLED === 'true'){
-	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- Installed MCM *'+ ' v'+ task.ACM_VERSION +'*\n```' +task.exitStatus + '```';
+	if (task.DESTROY === 'true'){
+		message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'*'+ task.exitStatus; 
 	}
-	else {
-	    message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- OpenShift version *'+ ' v'+ task.OCP_VERSION +'*\n```' +task.exitStatus + '```';
+	else{
+		if (task.ACM_ENABLED === 'true'){
+			message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- ACM version *`'+ task.ACM_VERSION +'`* ' +task.exitStatus;
+		}
+		else {
+			message = 'Cluster: *'+ task.PROVIDER + '/' + task.CLUSTER_NAME +'* -- OpenShift version *`'+ task.OCP_VERSION +'`* ' +task.exitStatus;
+		}		
 	}
+
     var body = {text: message}; // Slack requires message to be in a JSON object using text attribute.
 
     //console.log('Posting message to slack: ', message);
@@ -270,5 +308,4 @@ var httpsServer = https.createServer({
 }, app);
 
 httpsServer.listen(5555);
-//app.listen(5555);
 console.log("server starting on port: " + 5555);

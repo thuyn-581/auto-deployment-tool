@@ -38,8 +38,9 @@ platform:
   aws:
     region: ${region}
     userTags:
-      owner: thnguyen@redhat.com
+      owner: ${owner}
       cluster: ${cluster_name}
+	  team: ${team}
 
 pullSecret: '${ocp_pull_secret}'
 sshKey: |

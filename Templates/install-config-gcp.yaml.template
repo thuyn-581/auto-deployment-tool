@@ -40,7 +40,7 @@ networking:
 
 platform:
   gcp:
-    projectID: gc-acm-test
+    projectID: ${PROJECTID}
     region: ${region}
 
 pullSecret: '${ocp_pull_secret}'
