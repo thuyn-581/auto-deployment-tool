@@ -21,7 +21,7 @@ The following deployment scenarios are currently supported by the tool:
 	- on Azure
 	- on Google
 
-Using `curl` command to send a request	
+Using `curl` command to send a request
 `curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> https://147.75.104.202:5555/run`
 
 
@@ -43,7 +43,7 @@ Using `curl` command to send a request
 	"region": "us-east-1",
 	"clusterName": "thnguyen-ocp44",
 	"destroy": "true",	
-    "acmEnabled": "false",
+    	"acmEnabled": "false",
 	"acmHub": {
 		"acmVersion": "1.0.0-SNAPSHOT-2020-05-12-13-24-55",
 		"acmRepo": "upstream"
@@ -70,7 +70,7 @@ Using `curl` command to send a request
 	"region": "eastus2",
 	"clusterName": "thnguyen-ocp43-az",
 	"destroy": "false",
-    "acmEnabled": "true",
+    	"acmEnabled": "true",
 	"acmHub": {
 		"acmVersion": "1.0.0-RC2",
 		"acmRepo": "quay.io/acm-d"
@@ -95,7 +95,7 @@ Using `curl` command to send a request
 	"region": "eastus2",
 	"clusterName": "thnguyen-ocp43-az",
 	"destroy": "false",
-    "acmEnabled": "true",
+    	"acmEnabled": "true",
 	"acmHub": {
 		"acmVersion": "1.0.0-RC2",
 		"acmRepo": "quay.io/acm-d"
