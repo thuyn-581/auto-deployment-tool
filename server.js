@@ -131,7 +131,7 @@ function queueTask(req, res) {
 	
     if (ACM_ENABLED === 'true'){	
 		ACM_VERSION = req.body.acmHub.acmVersion;
-		REPO = req.body.acmHub.acmRepo;
+		ACM_REPO = req.body.acmHub.acmRepo;
     }	
 	
 	DESTROY = req.body.destroy;

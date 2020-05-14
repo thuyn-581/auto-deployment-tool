@@ -119,8 +119,9 @@ then
 		sed -i "s/^1.0.0[^ ]*/$acm_version/" snapshot.ver
 		
 		# override image repo
-		if [[ ! $acm_repo = "upstream" ]]; do
-			sed -i "s/quay.io\/open-cluster-management/$acm_repo/g" ./acm-operator/kustomization.yaml
+		if [[ ! $acm_repo = "upstream" ]]; then
+			echo "update acm repo '$acm_repo'"
+			sed -i "s/quay.io\/open-cluster-management/$(echo "${acm_repo//\//$'\\/'}")/g" ./acm-operator/kustomization.yaml
 			echo -e "  overrides:\n    imageRepository: \"${acm_repo}\""  | tee -a ./multiclusterhub/example-multiclusterhub-cr.yaml
 		fi
 		

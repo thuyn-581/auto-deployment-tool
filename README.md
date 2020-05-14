@@ -16,10 +16,12 @@ The server has been deployed on vSphere (public ip 147.75.104.202 - subject to c
 
 # Usages:
 The following deployment scenarios are currently supported by the tool:
-1. Deploy Openshift cluster
+1. Deploy Openshift + ACM cluster
 	- on AWS
 	- on Azure
-	
+	- on Google
+
+Using `curl` command to send a request	
 `curl -i -X POST -H 'Content-Type: application/json' -d @<data_file.json> https://147.75.104.202:5555/run`
 
 
@@ -31,15 +33,20 @@ The following deployment scenarios are currently supported by the tool:
 		"name": "aws",
 		"keyId":"xxx",
 		"keySecret":"xxx"
+		"tags": {
+			"owner": "thnguyen@redhat.com",
+			"team": "RHACM"
+		}		
 	},
-	"ocpVersion": "4.4.0-0.nightly-2020-03-03-065638",
+	"ocpVersion": "4.4.3",
 	"baseDnsDomain": "dev01.red-chesterfield.com",
 	"region": "us-east-1",
 	"clusterName": "thnguyen-ocp44",
+	"destroy": "true",	
     "acmEnabled": "false",
 	"acmHub": {
-		"csVersion": "3.3.0",
-		"scName": "gp2"
+		"acmVersion": "1.0.0-SNAPSHOT-2020-05-12-13-24-55",
+		"acmRepo": "upstream"
 	}
 }
 ```
@@ -53,15 +60,45 @@ The following deployment scenarios are currently supported by the tool:
 		"tenantId": "6047c7e9-b2ad-488d-a54e-dc3f6be6a7ee",
 		"appId":"xxx",
 		"appSecret":"xxx"
+		"tags": {
+			"owner": "thnguyen@redhat.com",
+			"team": "RHACM"
+		}		
 	},
 	"ocpVersion": "4.3.3",
 	"baseDnsDomain": "dev06.az.red-chesterfield.com",
 	"region": "eastus2",
 	"clusterName": "thnguyen-ocp43-az",
-    "acmEnabled": "false",
+	"destroy": "false",
+    "acmEnabled": "true",
 	"acmHub": {
-		"csVersion": "3.2.4",
-		"scName": "managed-premium"
+		"acmVersion": "1.0.0-RC2",
+		"acmRepo": "quay.io/acm-d"
+	}
+}
+```
+
+3. Google:
+```json
+{
+	"provider": {
+		"name": "gcp",
+		"projectId": "gc-acm-test",
+		"saName":"openshift-terraform",
+		"tags": {
+			"owner": "thnguyen@redhat.com",
+			"team": "RHACM"
+		}
+	},
+	"ocpVersion": "4.3.3",
+	"baseDnsDomain": "dev06.az.red-chesterfield.com",
+	"region": "eastus2",
+	"clusterName": "thnguyen-ocp43-az",
+	"destroy": "false",
+    "acmEnabled": "true",
+	"acmHub": {
+		"acmVersion": "1.0.0-RC2",
+		"acmRepo": "quay.io/acm-d"
 	}
 }
 ```
