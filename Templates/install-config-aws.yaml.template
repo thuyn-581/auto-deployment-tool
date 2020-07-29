@@ -1,30 +1,28 @@
 apiVersion: v1
-
 baseDomain: ${base_dns_domain}
 metadata:
   creationTimestamp: null
   name: ${cluster_name}
-
 compute:
-- hyperthreading: Enabled
-  name: worker
+- name: worker
   platform:
     aws:
-      type:  m5.2xlarge
+      type:  m4.2xlarge
       rootVolume:
-        size: 128
+		iops: 0
+        size: 100
+		type: gp2
   replicas: 3 
-
 controlPlane:
-  hyperthreading: Enabled
   name: master
   platform:
     aws:
-      type:  m5.xlarge
+      type:  m4.2xlarge
       rootVolume:
-        size: 128
+		iops: 0
+        size: 100
+		type: gp2
   replicas: 3
-
 networking:
   clusterNetwork:
   - cidr: 10.128.0.0/14
@@ -33,7 +31,6 @@ networking:
   networkType: OpenShiftSDN
   serviceNetwork:
   - 172.30.0.0/16
-
 platform:
   aws:
     region: ${region}
@@ -41,7 +38,13 @@ platform:
       owner: ${owner}
       cluster: ${cluster_name}
 	  team: ${team}
-
 pullSecret: '${ocp_pull_secret}'
 sshKey: |
   ${public_key}  
+imageContentSources:
+- mirrors:
+  - quay.io:443/acm-d
+  source: registry.redhat.io/rhacm1-tech-preview
+- mirrors:
+  - registry.redhat.io/openshift4/ose-oauth-proxy
+  source: registry.access.redhat.com/openshfit4/ose-oauth-proxy

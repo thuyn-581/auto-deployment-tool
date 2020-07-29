@@ -72,7 +72,7 @@ rm -rf $ocp_installation_dir
 
 if [[ $destroy = "false" ]]; 
 then
-	# export publick key
+	# export public key
 	export ocp_pull_secret=`cat ${HOME}/auto-deployment-tool/pull-secret.txt`
 	export public_key=`cat ${HOME}/.ssh/id_rsa.pub`
 
@@ -107,7 +107,7 @@ then
 	until [ `oc get pods --all-namespaces --no-headers | grep -v Running | grep -v Completed | wc -l` -eq 0 ]; do
 		sleep 10
 	done
-
+	
 	# install acm
 	if [[ $acm_enabled = "true" ]]; then
 		printf "\nINSTALL ACM - VERSION $acm_version \n"			
@@ -115,17 +115,35 @@ then
 		cd $ocp_installation_dir
 		git clone git@github.com:open-cluster-management/deploy.git
 		cd deploy
-		cp $HOME/auto-deployment-tool/pull-secret.yaml ./prereqs
+		
+		# create pull secret
+		echo "Writing .prereqs/pull-secret.yaml"
+cat <<EOF > ./prereqs/pull-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: multiclusterhub-operator-pull-secret
+  namespace: open-cluster-management
+data:
+  .dockerconfigjson: `cat $HOME/auto-deployment-tool/pull-secret.txt|base64 -w 0`
+type: kubernetes.io/dockerconfigjson
+EOF
+		
+		# set snapshot
 		sed -i "s/^1.0.0[^ ]*/$acm_version/" snapshot.ver
+		
+		# set multiclusterhub cr api version	
+		sed -i "s/v1/v1beta1/" ./multiclusterhub/example-multiclusterhub-cr.yaml
 		
 		# override image repo
 		if [[ ! $acm_repo = "upstream" ]]; then
-			echo "update acm repo '$acm_repo'"
-			sed -i "s/quay.io\/open-cluster-management/$(echo "${acm_repo//\//$'\\/'}")/g" ./acm-operator/kustomization.yaml
-			echo -e "  overrides:\n    imageRepository: \"${acm_repo}\""  | tee -a ./multiclusterhub/example-multiclusterhub-cr.yaml
+			printf "set downstream custom registry\n"
+			export COMPOSITE_BUNDLE=true
+			export CUSTOM_REGISTRY_REPO="quay.io/acm-d"
 		fi
 		
 		# start deploy
+		echo "Start deploying..."
 		sh start.sh --silent
 		
 		# wait for deploy complete

@@ -46,3 +46,10 @@ platform:
 pullSecret: '${ocp_pull_secret}'
 sshKey: |
   ${public_key}
+imageContentSources:
+- mirrors:
+  - quay.io:443/acm-d
+  source: registry.redhat.io/rhacm1-tech-preview
+- mirrors:
+  - registry.redhat.io/openshift4/ose-oauth-proxy
+  source: registry.access.redhat.com/openshfit4/ose-oauth-proxy  

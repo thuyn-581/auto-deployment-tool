@@ -1,5 +1,4 @@
 apiVersion: v1
-
 baseDomain: ${base_dns_domain}
 metadata:
   creationTimestamp: null
@@ -11,11 +10,9 @@ compute:
   platform:
     azure:
       type: Standard_D8s_v3
-      onDisk:
+      osDisk:
         diskSizeGB: 128
-      zones:
-        - 1
-  replicas: 3 
+  replicas: 3
 
 controlPlane:
   hyperthreading: Enabled
@@ -23,10 +20,8 @@ controlPlane:
   platform:
     azure:
       type: Standard_D4s_v3
-      onDisk:
+      osDisk:
         diskSizeGB: 128
-      zones:
-        - 1
   replicas: 3
 
 networking:
@@ -46,3 +41,10 @@ platform:
 pullSecret: '${ocp_pull_secret}'
 sshKey: |
   ${public_key}
+imageContentSources:
+- mirrors:
+  - quay.io:443/acm-d
+  source: registry.redhat.io/rhacm1-tech-preview
+- mirrors:
+  - registry.redhat.io/openshift4/ose-oauth-proxy
+  source: registry.access.redhat.com/openshfit4/ose-oauth-proxy  

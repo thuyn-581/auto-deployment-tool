@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "Logging in to Azure CLI"
-az login --service-principal -u "${azure_client_id}" -p "${azure_client_secret}" --tenant "${azure_tenant_id}"
+az login --service-principal -u "${APP_ID}" -p "${SECRET}" --tenant "${TENANT_ID}"
 if [[ $? -ne 0 ]]; then
     echo "az login failed, halting terraform because OpenShift cluster can't be tagged."
     exit 1
